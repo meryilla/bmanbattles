@@ -13,6 +13,8 @@ const string g_szBronzeBombModel = "models/bman/bomb_bronze_a.mdl";
 const string g_szSilverBombModel = "models/bman/bomb_silver_a.mdl";
 const string g_szGoldBombModel = "models/bman/bomb_gold_a.mdl";
 
+const string g_szPowerupModel = "models/bman/bman_powerup_a.mdl";
+
 const string g_szWhitePlayerModel = "models/player/bman_white/bman_white.mdl";
 const string g_szPinkPlayerModel = "models/player/bman_pink/bman_pink.mdl";
 const string g_szBlackPlayerModel = "models/player/bman_black/bman_black.mdl";
@@ -37,6 +39,8 @@ array<float> g_flSortedPlayerScores;
 
 EHandle g_hThirdPlayer, g_hSecondPlayer, g_hFirstPlayer;
 CCVar cvarAltBombSolidLogic( "altbombsolidlogic", 0, "Enable alternative bomb solid logic", ConCommandFlag::AdminOnly );
+
+
 	
 array<string> 	DeathSoundEvents = {
 				"weapons/explode3.wav",
@@ -75,6 +79,7 @@ void MapInit()
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupFire", "func_powerup_fire" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupSkate", "func_powerup_skate" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupSkull", "func_powerup_skull" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupKick", "func_powerup_kick" );
 	
 	g_flPlayerScores.resize( 0 );
 	g_flPlayerScores.resize( 33 );
@@ -102,7 +107,7 @@ void CreateCamera( EHandle hPlayer )
 		{ "origin", "" + ( pPlayer.pev.origin + Vector( 0, 0, 448 ) ).ToString() },
 		{ "wait", "5" },
 		{ "angles", Vector( 90, -90, 0 ).ToString() },
-		{ "spawnflags", string( 512 ) },
+		{ "spawnflags", string( 512 + 128 ) },
 		{ "targetname", "camera_PID_" + iEntityIndex }
 	};
 		
@@ -116,7 +121,6 @@ void EnableClassicCam( CBaseEntity@, CBaseEntity@, USE_TYPE, float flValue )
 	blClassicCamEnabled = true;
 }
 
-
 void Precache()
 {
 	g_Game.PrecacheModel( g_szBombModel1 );
@@ -126,6 +130,8 @@ void Precache()
 	g_Game.PrecacheModel( g_szSilverBombModel );
 	g_Game.PrecacheModel( g_szGoldBombModel );
 	g_Game.PrecacheModel( g_szAntiDelayBombModel );
+	
+	g_Game.PrecacheModel( g_szPowerupModel );
 	
 	g_Game.PrecacheModel( g_szWhitePlayerModel );
 	g_Game.PrecacheModel( g_szPinkPlayerModel );
@@ -142,6 +148,10 @@ void Precache()
 	g_SoundSystem.PrecacheSound( "weapons/explode3.wav" );
 	g_SoundSystem.PrecacheSound( "weapons/explode4.wav" );
 	g_SoundSystem.PrecacheSound( "weapons/explode5.wav" );	
+	
+	g_SoundSystem.PrecacheSound( "bman/item_get.mp3" );
+	g_SoundSystem.PrecacheSound( "bman/skull.mp3" );
+	g_SoundSystem.PrecacheSound( "bman/kick.mp3" );		
 	
 	g_SoundSystem.PrecacheSound( g_szScreamSound );
 
@@ -271,6 +281,7 @@ HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 			}
 		}
 	}
+
 	if( blClassicCamEnabled )
 	{
 		CBaseEntity@ pCamera = g_EntityFuncs.FindEntityByTargetname( pCamera, "camera_PID_" + pPlayer.entindex() );
@@ -279,7 +290,8 @@ HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 			
 		if( kvPlayer.GetKeyvalue( "$i_activePlayer" ).GetInteger() == 1 )
 		{
-			pPlayer.pev.angles = Vector( 0, -90, 0 );
+			//pPlayer.pev.angles = Vector( 0, -90, 0 );
+			pPlayer.pev.angles.z = 0;
 			pPlayer.pev.fixangle = FAM_FORCEVIEWANGLES;
 		}
 		else
@@ -348,6 +360,7 @@ HookReturnCode SetPlayerValues( CBasePlayer@ pPlayer )
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$f_recentlyPoisoned", "0" );
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_hasPoisonSprite", "0" );
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_activePlayer", "0" );
+	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_canKick", "0" );
 	
 	pPlayer.pev.frags = 0;
 	int iPlayerIndex = pPlayer.entindex();
@@ -372,6 +385,7 @@ void ClearPlayerKeyValues( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TY
 			g_EntityFuncs.DispatchKeyValue( pEntity.edict(), "$i_poisonType", "0" );
 			g_EntityFuncs.DispatchKeyValue( pEntity.edict(), "$s_hasPoisonSprite", "0" );
 			g_EntityFuncs.DispatchKeyValue( pEntity.edict(), "$i_activePlayer", "0" );
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_canKick", "0" );
 			pPlayer.pev.targetname = "";
 			pPlayer.pev.health = 50;
 			pPlayer.SetMaxSpeed( 200 );
@@ -971,6 +985,7 @@ class CFuncBomb : ScriptBaseEntity
 	private float m_flExplodeTime;
 	private array<int> m_iPlayersOnBombTile;
 	private bool m_blOwnerInTile = true;
+	private bool m_blIsMoving = false;
 	
 	void Precache()
 	{
@@ -1043,6 +1058,43 @@ class CFuncBomb : ScriptBaseEntity
 		{
 			self.pev.solid = SOLID_BBOX;
 			self.pev.renderamt = 255;				
+		}
+		
+		if( m_blIsMoving && self.pev.velocity == Vector( 0, 0, 0 ) )
+			m_blIsMoving = false;
+		
+		if( self.pev.solid == SOLID_BBOX && !m_blIsMoving )
+		{
+			CBaseEntity@ pEntityContact;
+		
+			while( ( @pEntityContact = g_EntityFuncs.FindEntityByClassname( pEntityContact, "player" ) ) !is null )
+			{
+				if( self.Intersects( pEntityContact ) )
+					break;
+				else
+					continue;
+			}
+			
+			if( pEntityContact !is null && pEntityContact.IsPlayer() )
+			{
+				CustomKeyvalues@ kvEntityContact = pEntityContact.GetCustomKeyvalues();
+				if( kvEntityContact.GetKeyvalue( "$i_canKick" ).GetInteger() == 1  )
+				{
+					m_blIsMoving = true;
+					float flXDiff = abs( self.pev.origin.x - pEntityContact.pev.origin.x );
+					float flYDiff = abs( self.pev.origin.y - pEntityContact.pev.origin.y );
+					if( self.pev.origin.x > pEntityContact.pev.origin.x && flXDiff >= 32 )
+						self.pev.velocity.x = 400;
+					else if( self.pev.origin.x < pEntityContact.pev.origin.x && flXDiff >= 32 )
+						self.pev.velocity.x = -400;
+					else if( self.pev.origin.y > pEntityContact.pev.origin.y && flYDiff >= 32 )
+						self.pev.velocity.y = 400;
+					else if( self.pev.origin.y < pEntityContact.pev.origin.y && flYDiff >= 32 )
+						self.pev.velocity.y = -400;
+						
+					g_SoundSystem.EmitSoundDyn( pEntityContact.edict(), CHAN_AUTO, "bman/kick.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
+				}
+			}
 		}
 		
 		if( g_Engine.time > m_flExplodeTime || ( kvBomb !is null && kvBomb.GetKeyvalue( "$i_exploding" ).GetInteger() == 1 ) )
@@ -1285,8 +1337,8 @@ class CFuncCrate : ScriptBaseEntity
 		te_breakmodel( self.pev.origin + Vector( 0, 0, 64 ), self.pev.maxs - self.pev.mins, Vector( 0, 0, 50 ) );
 		SetThink( null );
 		
-		g_EntityFuncs.FireTargets( self.pev.target, self, self, USE_TOGGLE );
-		
+		//g_EntityFuncs.FireTargets( self.pev.target, self, self, USE_TOGGLE );
+		ChoosePowerup( self );
 		g_EntityFuncs.Remove( self );
 	}
 
@@ -1328,17 +1380,70 @@ class CFuncCrate : ScriptBaseEntity
 	}		
 }
 
-class CPowerupBomb : ScriptBaseEntity
+void ChoosePowerup( EHandle hCrate )
+{
+	if( !hCrate )
+		return;
+		
+	CBaseEntity@ pCrate = cast<CBaseEntity@>( hCrate.GetEntity() );
+	string szPowerup;
+	
+	if( Math.RandomLong( 1, 7 ) != 7 )
+		return;
+		
+	dictionary powerupValues =
+	{
+		{ "origin", "" + ( pCrate.pev.origin ).ToString() }
+	};
+		
+	int iPowerupChance = Math.RandomLong( 1, 11 );
+	
+	//There's got to be a better way than this...
+	if( iPowerupChance <= 3 )
+		szPowerup = "func_powerup_bomb";
+	else if( iPowerupChance > 3 && iPowerupChance <= 6 )
+		szPowerup = "func_powerup_fire";
+	else if( iPowerupChance > 6 && iPowerupChance <= 8 )
+		szPowerup = "func_powerup_skate";
+	else if( iPowerupChance == 9 )
+		szPowerup = "func_powerup_life";
+	else if( iPowerupChance == 10 ) 
+		szPowerup = "func_powerup_kick";
+	else
+		szPowerup = "func_powerup_skull";
+		
+	CBaseEntity@ pPowerup = g_EntityFuncs.CreateEntity( szPowerup, powerupValues, true);
+	g_EntityFuncs.SetSize( pPowerup.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
+
+}
+
+class CPowerupBomb : ScriptBaseAnimating
 {
 	private float m_flNextTouchTime;
 	
 	void Spawn()
 	{
-		g_EntityFuncs.SetModel( self, self.pev.model );
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 2 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 		
-		self.pev.solid = SOLID_BSP;
+		self.pev.solid = SOLID_SLIDEBOX;
 		self.pev.movetype = MOVETYPE_PUSHSTEP;
 		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();	
+		
+		self.pev.targetname = "powerup_bomb_powerup";
 		
 		if( self.pev.health == 0.0f )
 			self.pev.health  = g_iExplodeDamage;
@@ -1378,22 +1483,39 @@ class CPowerupBomb : ScriptBaseEntity
 			{
 				self.Killed( null, 0 );
 			}
+			g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
 		}
 		self.pev.nextthink = g_Engine.time + 0.1f;
 	}	
 }
 
-class CPowerupLife : ScriptBaseEntity
+class CPowerupLife : ScriptBaseAnimating
 {
 	private float m_flNextTouchTime;
 	
 	void Spawn()
 	{
-		g_EntityFuncs.SetModel( self, self.pev.model );
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 7 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 		
-		self.pev.solid = SOLID_BSP;
+		self.pev.solid = SOLID_SLIDEBOX;
 		self.pev.movetype = MOVETYPE_PUSHSTEP;
 		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();		
+		
+		self.pev.targetname = "powerup_life_powerup";
 		
 		if( self.pev.health == 0.0f )
 			self.pev.health  = g_iExplodeDamage;
@@ -1426,22 +1548,39 @@ class CPowerupLife : ScriptBaseEntity
 				AttachLifeSprite( pEntity );
 				self.Killed( null, 0 );
 			}
+			g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
 		}
 		self.pev.nextthink = g_Engine.time + 0.1f;
 	}			
 }
 
-class CPowerupFire : ScriptBaseEntity
+class CPowerupFire : ScriptBaseAnimating
 {
 	private float m_flNextTouchTime;
 	
 	void Spawn()
 	{
-		g_EntityFuncs.SetModel( self, self.pev.model );
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 5 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 		
-		self.pev.solid = SOLID_BSP;
+		self.pev.solid = SOLID_SLIDEBOX;
 		self.pev.movetype = MOVETYPE_PUSHSTEP;
 		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();	
+		
+		self.pev.targetname = "powerup_fire_powerup";
 		
 		if( self.pev.health == 0.0f )
 			self.pev.health  = g_iExplodeDamage;
@@ -1482,23 +1621,40 @@ class CPowerupFire : ScriptBaseEntity
 				{
 					self.Killed( null, 0 );
 				}
+				g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
 			}
 		}
 		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 }
 
-class CPowerupSkate : ScriptBaseEntity
+class CPowerupSkate : ScriptBaseAnimating
 {
 	private float m_flNextTouchTime;
 	
 	void Spawn()
 	{
-		g_EntityFuncs.SetModel( self, self.pev.model );
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 15 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 		
-		self.pev.solid = SOLID_BSP;
+		self.pev.solid = SOLID_SLIDEBOX;
 		self.pev.movetype = MOVETYPE_PUSHSTEP;
 		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();	
+		
+		self.pev.targetname = "powerup_skate_powerup";
 		
 		if( self.pev.health == 0.0f )
 			self.pev.health  = g_iExplodeDamage;
@@ -1528,23 +1684,40 @@ class CPowerupSkate : ScriptBaseEntity
 				pPlayer.SetMaxSpeed( iNewSpeed );
 				self.Killed( null, 0 );
 			}
+			g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
 		}
 		self.pev.nextthink = g_Engine.time + 0.1f;
 	}			
 }
 
-class CPowerupSkull : ScriptBaseEntity
+class CPowerupSkull : ScriptBaseAnimating
 {
 	private float m_flNextTouchTime;
 	private int m_iPoisonEffect;
 	
 	void Spawn()
 	{
-		g_EntityFuncs.SetModel( self, self.pev.model );
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 13 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 		
-		self.pev.solid = SOLID_BSP;
+		self.pev.solid = SOLID_SLIDEBOX;
 		self.pev.movetype = MOVETYPE_PUSHSTEP;
 		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();	
+		
+		self.pev.targetname = "powerup_skull_powerup";
 		
 		if( self.pev.health == 0.0f )
 			self.pev.health  = g_iExplodeDamage;
@@ -1614,8 +1787,70 @@ class CPowerupSkull : ScriptBaseEntity
 						break;
 				}
 				self.Killed( null, 0 );
+				g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/skull.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
 			}
 		}
 		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
+}
+
+class CPowerupKick : ScriptBaseAnimating
+{
+	private float m_flNextTouchTime;
+	
+	void Spawn()
+	{
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 8 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
+		
+		self.pev.solid = SOLID_SLIDEBOX;
+		self.pev.movetype = MOVETYPE_PUSHSTEP;
+		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();	
+		
+		self.pev.targetname = "powerup_kick_powerup";
+		
+		if( self.pev.health == 0.0f )
+			self.pev.health = g_iExplodeDamage;
+		
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+	
+	void Think()
+	{
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
+		
+		if( pEntity !is null )
+		{
+			if( pEntity.IsPlayer() )
+			{
+				CBasePlayer@ pPlayer = cast<CBasePlayer@>( pEntity );
+				ClearPoison( pPlayer );
+				g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_canKick", "1" );
+				self.Killed( null, 0 );
+			}
+			g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
+		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}			
 }
