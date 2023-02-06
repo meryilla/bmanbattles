@@ -22,11 +22,13 @@ const string g_szScreamSound = "bman/aaaa.wav";
 const string g_szBombGibModel = "models/metalplategibs_dark.mdl";
 const string g_szExplosionSprite = "sprites/rc/rc_explosion2HD.spr";
 
-const float g_flCrateHealth = 50;
 const int g_iExplodeDamage = 50;
 
 //If this is enabled, players are slayed/refused play if they are using annoying player models
 const bool blAntiCancerEnabled = true;
+
+//If enabled, sets camera to top-down view like in original bomberman. Is very laggy with 150+ ping.
+bool blClassicCamEnabled = false;
 
 int g_iActivePlayerCount = 0;
 
@@ -60,9 +62,9 @@ void MapInit()
 {
 	g_Hooks.RegisterHook( Hooks::Player::PlayerUse, PlantBomb );
 	g_Hooks.RegisterHook( Hooks::Player::ClientPutInServer, SetPlayerValues );
-	g_Hooks.RegisterHook( Hooks::Player::PlayerSpawn, SetPlayerSpeed );
+	g_Hooks.RegisterHook( Hooks::Player::PlayerSpawn, PlayerSpawn );
 	g_Hooks.RegisterHook( Hooks::Player::PlayerTakeDamage, TakeDamage );
-	g_Hooks.RegisterHook( Hooks::Player::PlayerPostThink, PoisonThink );
+	g_Hooks.RegisterHook( Hooks::Player::PlayerPostThink, PlayerThink );
 	g_Hooks.RegisterHook( Hooks::Player::PlayerKilled, PlayerKilled );
 	g_Hooks.RegisterHook( Hooks::Player::ClientDisconnect, PlayerDisconnected );
 	
@@ -85,6 +87,35 @@ void MapInit()
 	if( blAntiCancerEnabled )
 		g_Scheduler.SetInterval( "AntiCancerDetection", 3.0f, g_Scheduler.REPEAT_INFINITE_TIMES );
 }
+
+void CreateCamera( EHandle hPlayer )
+{
+	if( !hPlayer )
+		return;
+		
+	CBasePlayer@ pPlayer = cast<CBasePlayer@>( hPlayer.GetEntity() );
+	
+	int iEntityIndex = pPlayer.entindex();
+	
+	dictionary cameraValues = 
+	{
+		{ "origin", "" + ( pPlayer.pev.origin + Vector( 0, 0, 448 ) ).ToString() },
+		{ "wait", "5" },
+		{ "angles", Vector( 90, -90, 0 ).ToString() },
+		{ "spawnflags", string( 512 ) },
+		{ "targetname", "camera_PID_" + iEntityIndex }
+	};
+		
+	CBaseEntity@ pCamera = g_EntityFuncs.CreateEntity( "trigger_camera", cameraValues );
+	pCamera.Use( pPlayer, pPlayer, USE_ON, 0 );
+	
+}
+
+void EnableClassicCam( CBaseEntity@, CBaseEntity@, USE_TYPE, float flValue )
+{
+	blClassicCamEnabled = true;
+}
+
 
 void Precache()
 {
@@ -142,6 +173,13 @@ HookReturnCode PlayerKilled( CBasePlayer@ pPlayer, CBaseEntity@ pAttacker, int i
 		if( kvPlayer.GetKeyvalue( "$i_poisoned" ).GetInteger() == 1 )
 			ClearPoison( pPlayer );
 	}
+	
+	
+	CBaseEntity@ pEntity = g_EntityFuncs.FindEntityByTargetname( pEntity, "camera_PID_" + pPlayer.entindex() );
+	if( pEntity !is null )
+	{
+		g_EntityFuncs.Remove( pEntity );	
+	}
 
 	return HOOK_CONTINUE;
 }
@@ -164,10 +202,13 @@ HookReturnCode PlayerDisconnected( CBasePlayer@ pPlayer )
 	return HOOK_CONTINUE;
 }
 
-HookReturnCode PoisonThink( CBasePlayer@ pPlayer )
+HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 {
 	if( pPlayer is null )
 		return HOOK_CONTINUE;
+		
+	//if( pPlayer.pev.solid != SOLID_NOT )	
+	//	pPlayer.pev.solid = SOLID_NOT;
 	
 	CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
 	
@@ -230,15 +271,37 @@ HookReturnCode PoisonThink( CBasePlayer@ pPlayer )
 			}
 		}
 	}
+	if( blClassicCamEnabled )
+	{
+		CBaseEntity@ pCamera = g_EntityFuncs.FindEntityByTargetname( pCamera, "camera_PID_" + pPlayer.entindex() );
+		if( pCamera !is null )
+			pCamera.pev.origin = pPlayer.pev.origin + Vector( 0, 0, 448 );
+			
+		if( kvPlayer.GetKeyvalue( "$i_activePlayer" ).GetInteger() == 1 )
+		{
+			pPlayer.pev.angles = Vector( 0, -90, 0 );
+			pPlayer.pev.fixangle = FAM_FORCEVIEWANGLES;
+		}
+		else
+			pPlayer.pev.fixangle = FAM_NOTHING;
+	}
+	
 	return HOOK_CONTINUE;
 }
 
-HookReturnCode SetPlayerSpeed( CBasePlayer@ pPlayer )
+HookReturnCode PlayerSpawn( CBasePlayer@ pPlayer )
 {
 	if( pPlayer is null )
 		return HOOK_CONTINUE;
 	
 	pPlayer.SetMaxSpeed( 200 );
+	
+	CBaseEntity@ pEntity = g_EntityFuncs.FindEntityByTargetname( pEntity, "camera_PID_" + pPlayer.entindex() );
+	if( pEntity !is null )
+	{
+		g_EntityFuncs.Remove( pEntity );
+	}
+	
 	return HOOK_CONTINUE;
 	
 }
@@ -335,7 +398,7 @@ HookReturnCode PlantBomb( CBasePlayer@ pPlayer, uint& out uiFlags )
 	return HOOK_CONTINUE;	
 }
 
-void AssignPlayerSpawns( CBaseEntity@, CBaseEntity@, USE_TYPE, float )
+void AssignPlayerSpawns( CBaseEntity@, CBaseEntity@, USE_TYPE, float flValue )
 {
 	int iPlayerCount = 1;
 	CBasePlayer@ pPlayer;
@@ -375,6 +438,12 @@ void AssignPlayerSpawns( CBaseEntity@, CBaseEntity@, USE_TYPE, float )
 				{
 					g_iActivePlayerCount = iPlayerCount - 1;				
 					g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_activePlayer", "1" );
+					if( blClassicCamEnabled )
+					{
+						CreateCamera( pPlayer );
+						pPlayer.pev.angles = Vector( 0, -90, 0 );
+						pPlayer.pev.fixangle = FAM_FORCEVIEWANGLES;
+					}
 				}
 			}		
 		}
@@ -390,6 +459,12 @@ void AssignPlayerSpawns( CBaseEntity@, CBaseEntity@, USE_TYPE, float )
 			{
 				g_iActivePlayerCount = iPlayerCount - 1;				
 				g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_activePlayer", "1" );
+				if( blClassicCamEnabled )
+				{
+					CreateCamera( pPlayer );
+					pPlayer.pev.angles = Vector( 0, -90, 0 );
+					pPlayer.pev.fixangle = FAM_FORCEVIEWANGLES;
+				}
 			}
 		}
 	}
@@ -583,7 +658,7 @@ void CreateBomb( EHandle hPlayer )
 		}
 
 		@pBomb = g_EntityFuncs.CreateEntity( "func_bomb", bombValues, true);
-		g_EntityFuncs.SetSize( pBomb.pev, Vector( -20, -20, 0 ), Vector( 20, 20, 50 ) );
+		g_EntityFuncs.SetSize( pBomb.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 		
 		pBomb.pev.targetname = "player_bomb_PID" + pPlayer.entindex() + "_EID" + pBomb.entindex();
 		
@@ -646,6 +721,12 @@ void AttachLifeSprite( EHandle hEntity )
 		@pSprite = g_EntityFuncs.CreateEntity( "env_sprite", sprValues, true );
 		g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "bonusLife_attachSprite", null, null, USE_ON, 0, 0 );
 		
+		if( blClassicCamEnabled )
+		{
+			g_EntityFuncs.DispatchKeyValue( pSprite.edict(), "vp_type", "5" );
+			g_EntityFuncs.DispatchKeyValue( pAttach.edict(), "offset", Vector( 0, 20, 64 ).ToString() );
+		}
+		
 		CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
 		
 		if( kvPlayer !is null )
@@ -680,6 +761,11 @@ void AttachBombSprite( EHandle hEntity )
 			@pSprite = g_EntityFuncs.CreateEntity( "env_sprite", sprValues, true );
 			g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "bonusBomb_attachSprite", null, null, USE_ON, 0, 0 );
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_hasBombSprite", "2" );
+			
+			if( blClassicCamEnabled )
+			{
+				g_EntityFuncs.DispatchKeyValue( pSprite.edict(), "vp_type", "5" );
+			}
 			return;
 		}
 	}
@@ -709,6 +795,12 @@ void AttachBombSprite( EHandle hEntity )
 		
 		@pSprite = g_EntityFuncs.CreateEntity( "env_sprite", sprValues, true );
 		g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "bonusBomb_attachSprite", null, null, USE_ON, 0, 0 );
+		
+		if( blClassicCamEnabled )
+		{
+			g_EntityFuncs.DispatchKeyValue( pSprite.edict(), "vp_type", "5" );
+			g_EntityFuncs.DispatchKeyValue( pAttach.edict(), "offset", Vector( 20, 0, 64 ).ToString() );
+		}
 		
 		if( kvPlayer !is null )
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_hasBombSprite", "1" );
@@ -754,6 +846,9 @@ void AttachPoisonSprite( EHandle hEntity )
 		@pSprite = g_EntityFuncs.CreateEntity( "env_sprite", sprValues, true );
 		g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "poison_attachSprite", null, null, USE_ON, 0, 0 );
 		
+		if( blClassicCamEnabled )
+			g_EntityFuncs.DispatchKeyValue( pSprite.edict(), "vp_type", "5" );
+		
 		CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
 		
 		if( kvPlayer !is null )
@@ -778,6 +873,21 @@ void ClearSprites( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useTy
 				g_EntityFuncs.Remove( pEntity );
 		}
 	}
+	
+	if( blClassicCamEnabled )
+	{
+		CBaseEntity@ pCamera;
+		
+		while( ( @pCamera = g_EntityFuncs.FindEntityByClassname( pCamera, "trigger_camera" ) ) !is null )
+		{
+			if( pCamera is null )
+				continue;
+			
+			pCamera.Use( null, null, USE_OFF );
+			g_EntityFuncs.Remove( pCamera );
+		}
+	}
+	
 }
 
 void ClearPoison( EHandle hEntity )
@@ -1166,7 +1276,7 @@ class CFuncCrate : ScriptBaseEntity
 		self.pev.nextthink = g_Engine.time + 1;
 		
 		if( self.pev.health == 0.0f )
-			self.pev.health  = g_flCrateHealth;
+			self.pev.health  = g_iExplodeDamage;
 	}
 	
 	void Killed( entvars_t@ pevAtttacker, int iGibbed )
@@ -1231,42 +1341,45 @@ class CPowerupBomb : ScriptBaseEntity
 		self.pev.takedamage = DAMAGE_YES;
 		
 		if( self.pev.health == 0.0f )
-			self.pev.health  = g_flCrateHealth;
+			self.pev.health  = g_iExplodeDamage;
 		
-		m_flNextTouchTime = g_Engine.time + 1.0f;
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 	
-	void Touch( CBaseEntity@ pEntity )
+	void Think()
 	{
-		if( m_flNextTouchTime > g_Engine.time )
-			return;
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
 		
 		if( pEntity !is null )
 		{
-			if( pEntity.IsPlayer() )
+			ClearPoison( pEntity );
+			CustomKeyvalues@ kvEntity = pEntity.GetCustomKeyvalues();
+			
+			if( kvEntity is null || !kvEntity.HasKeyvalue( "$i_maxBombCount" ) )
+				return;
+			
+			if ( kvEntity.GetKeyvalue( "$i_maxBombCount" ).GetInteger() < 3 )
 			{
-				ClearPoison( pEntity );
-				CustomKeyvalues@ kvEntity = pEntity.GetCustomKeyvalues();
-				
-				m_flNextTouchTime = g_Engine.time + 1.0f;
-				
-				if( kvEntity is null || !kvEntity.HasKeyvalue( "$i_maxBombCount" ) )
-					return;
-				
-				if ( kvEntity.GetKeyvalue( "$i_maxBombCount" ).GetInteger() < 3 )
-				{
-					string szMaxBombCount;
-					szMaxBombCount = string( kvEntity.GetKeyvalue( "$i_maxBombCount" ).GetInteger() + 1 );
-					g_EntityFuncs.DispatchKeyValue( pEntity.edict(), "$i_maxBombCount", szMaxBombCount );
-					AttachBombSprite( pEntity );
-					self.Killed( null, 0 );
-				}
-				else
-				{
-					self.Killed( null, 0 );
-				}
+				string szMaxBombCount;
+				szMaxBombCount = string( kvEntity.GetKeyvalue( "$i_maxBombCount" ).GetInteger() + 1 );
+				g_EntityFuncs.DispatchKeyValue( pEntity.edict(), "$i_maxBombCount", szMaxBombCount );
+				AttachBombSprite( pEntity );
+				self.Killed( null, 0 );
+			}
+			else
+			{
+				self.Killed( null, 0 );
 			}
 		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}	
 }
 
@@ -1283,21 +1396,27 @@ class CPowerupLife : ScriptBaseEntity
 		self.pev.takedamage = DAMAGE_YES;
 		
 		if( self.pev.health == 0.0f )
-			self.pev.health  = g_flCrateHealth;
+			self.pev.health  = g_iExplodeDamage;
 		
-		m_flNextTouchTime = g_Engine.time + 1.0f;
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 	
-	void Touch( CBaseEntity@ pEntity )
+	void Think()
 	{
-		if( m_flNextTouchTime > g_Engine.time )
-			return;
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
 		
 		if( pEntity !is null )
 		{
 			if( pEntity.IsPlayer() )
 			{
-				m_flNextTouchTime = g_Engine.time + 3.0f;
 				ClearPoison( pEntity );
 				if( pEntity.pev.health > ( pEntity.pev.max_health - g_iExplodeDamage ) )
 					pEntity.pev.health = pEntity.pev.health + ( pEntity.pev.max_health - pEntity.pev.health );
@@ -1308,6 +1427,7 @@ class CPowerupLife : ScriptBaseEntity
 				self.Killed( null, 0 );
 			}
 		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}			
 }
 
@@ -1324,15 +1444,22 @@ class CPowerupFire : ScriptBaseEntity
 		self.pev.takedamage = DAMAGE_YES;
 		
 		if( self.pev.health == 0.0f )
-			self.pev.health  = g_flCrateHealth;
+			self.pev.health  = g_iExplodeDamage;
 		
-		m_flNextTouchTime = g_Engine.time + 1.0f;
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 	
-	void Touch( CBaseEntity@ pEntity )
+	void Think()
 	{
-		if( m_flNextTouchTime > g_Engine.time )
-			return;
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
 		
 		if( pEntity !is null )
 		{
@@ -1341,7 +1468,6 @@ class CPowerupFire : ScriptBaseEntity
 				ClearPoison( pEntity );
 				CustomKeyvalues@ kvEntity = pEntity.GetCustomKeyvalues();
 				
-				m_flNextTouchTime = g_Engine.time + 1.0f;
 				
 				if( kvEntity is null || !kvEntity.HasKeyvalue( "$i_ownBombStrength" ) )
 					return;
@@ -1358,6 +1484,7 @@ class CPowerupFire : ScriptBaseEntity
 				}
 			}
 		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 }
 
@@ -1374,15 +1501,22 @@ class CPowerupSkate : ScriptBaseEntity
 		self.pev.takedamage = DAMAGE_YES;
 		
 		if( self.pev.health == 0.0f )
-			self.pev.health  = g_flCrateHealth;
+			self.pev.health  = g_iExplodeDamage;
 		
-		m_flNextTouchTime = g_Engine.time + 1.0f;
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 	
-	void Touch( CBaseEntity@ pEntity )
+	void Think()
 	{
-		if( m_flNextTouchTime > g_Engine.time )
-			return;
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
 		
 		if( pEntity !is null )
 		{
@@ -1390,12 +1524,12 @@ class CPowerupSkate : ScriptBaseEntity
 			{
 				CBasePlayer@ pPlayer = cast<CBasePlayer@>( pEntity );
 				ClearPoison( pPlayer );
-				m_flNextTouchTime = g_Engine.time + 3.0f;
 				int iNewSpeed = pPlayer.GetMaxSpeed() + 20;
 				pPlayer.SetMaxSpeed( iNewSpeed );
 				self.Killed( null, 0 );
 			}
 		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}			
 }
 
@@ -1413,15 +1547,22 @@ class CPowerupSkull : ScriptBaseEntity
 		self.pev.takedamage = DAMAGE_YES;
 		
 		if( self.pev.health == 0.0f )
-			self.pev.health  = g_flCrateHealth;
+			self.pev.health  = g_iExplodeDamage;
 		
-		m_flNextTouchTime = g_Engine.time + 1.0f;
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 	
-	void Touch( CBaseEntity@ pEntity )
+	void Think()
 	{
-		if( m_flNextTouchTime > g_Engine.time )
-			return;
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
 		
 		if( pEntity !is null )
 		{
@@ -1429,7 +1570,6 @@ class CPowerupSkull : ScriptBaseEntity
 			{
 				CBasePlayer@ pPlayer = cast<CBasePlayer@>( pEntity );
 				CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
-				m_flNextTouchTime = g_Engine.time + 3.0f;
 				ClearPoison( pPlayer );
 				m_iPoisonEffect = Math.RandomLong( 0, 4 );
 				
@@ -1476,5 +1616,6 @@ class CPowerupSkull : ScriptBaseEntity
 				self.Killed( null, 0 );
 			}
 		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
 }
