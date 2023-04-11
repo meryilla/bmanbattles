@@ -4,7 +4,6 @@ By Meryilla
 Yes, this script could do with more comments. Yes, the custom classes could've been split into their own files. Yes, the script is amateurish. 
 But it works and I'm a lazy individual, so it's good enough for me :^)
 */
-	
 const string g_szBombModel1 = "models/bman/bomb_small_b.mdl";
 const string g_szBombModel2 = "models/bman/bomb_med_b.mdl";
 const string g_szBombModel3 = "models/bman/bomb_large_b.mdl";
@@ -71,6 +70,7 @@ void MapInit()
 	g_Hooks.RegisterHook( Hooks::Player::PlayerPostThink, PlayerThink );
 	g_Hooks.RegisterHook( Hooks::Player::PlayerKilled, PlayerKilled );
 	g_Hooks.RegisterHook( Hooks::Player::ClientDisconnect, PlayerDisconnected );
+	g_Hooks.RegisterHook( Hooks::Player::ClientSay, ChatCheck );
 	
 	g_CustomEntityFuncs.RegisterCustomEntity( "CFuncBomb", "func_bomb" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CFuncCrate", "func_crate" );
@@ -93,6 +93,24 @@ void MapInit()
 		g_Scheduler.SetInterval( "AntiCancerDetection", 3.0f, g_Scheduler.REPEAT_INFINITE_TIMES );
 }
 
+HookReturnCode ChatCheck( SayParameters@ pParams )
+{
+	CBasePlayer@ pPlayer = pParams.GetPlayer();
+	const CCommand@ pArguments = pParams.GetArguments();
+	CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
+	
+	if( pPlayer is null )
+		return HOOK_CONTINUE;	
+	
+	if( pArguments[ 0 ] == ".debug" )
+	{
+		pParams.ShouldHide = true;
+		g_EngineFuncs.ClientPrintf( pPlayer, print_center, "" + kvPlayer.GetKeyvalue( "$i_maxBombCount" ).GetInteger() + "\n" );
+	}
+	
+	return HOOK_CONTINUE;
+}
+
 void CreateCamera( EHandle hPlayer )
 {
 	if( !hPlayer )
@@ -104,10 +122,10 @@ void CreateCamera( EHandle hPlayer )
 	
 	dictionary cameraValues = 
 	{
-		{ "origin", "" + ( pPlayer.pev.origin + Vector( 0, 0, 448 ) ).ToString() },
+		{ "origin", "" + ( pPlayer.pev.origin + Vector( 0, 0, 400 ) ).ToString() },
 		{ "wait", "5" },
 		{ "angles", Vector( 90, -90, 0 ).ToString() },
-		{ "spawnflags", string( 512 + 128 ) },
+		{ "spawnflags", string( 512 ) },
 		{ "targetname", "camera_PID_" + iEntityIndex }
 	};
 		
@@ -120,6 +138,7 @@ void EnableClassicCam( CBaseEntity@, CBaseEntity@, USE_TYPE, float flValue )
 {
 	blClassicCamEnabled = true;
 }
+
 
 void Precache()
 {
@@ -217,6 +236,7 @@ HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 	if( pPlayer is null )
 		return HOOK_CONTINUE;
 		
+	//No-player collision has a myriad of issues
 	//if( pPlayer.pev.solid != SOLID_NOT )	
 	//	pPlayer.pev.solid = SOLID_NOT;
 	
@@ -281,17 +301,16 @@ HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 			}
 		}
 	}
-
 	if( blClassicCamEnabled )
 	{
 		CBaseEntity@ pCamera = g_EntityFuncs.FindEntityByTargetname( pCamera, "camera_PID_" + pPlayer.entindex() );
 		if( pCamera !is null )
-			pCamera.pev.origin = pPlayer.pev.origin + Vector( 0, 0, 448 );
+			pCamera.pev.origin = pPlayer.pev.origin + Vector( 0, 0, 400 );
 			
 		if( kvPlayer.GetKeyvalue( "$i_activePlayer" ).GetInteger() == 1 )
 		{
-			//pPlayer.pev.angles = Vector( 0, -90, 0 );
-			pPlayer.pev.angles.z = 0;
+			pPlayer.pev.angles = Vector( 0, -90, 0 );
+			//pPlayer.pev.angles.z = 0;
 			pPlayer.pev.fixangle = FAM_FORCEVIEWANGLES;
 		}
 		else
@@ -366,6 +385,21 @@ HookReturnCode SetPlayerValues( CBasePlayer@ pPlayer )
 	int iPlayerIndex = pPlayer.entindex();
 	g_flPlayerScores[iPlayerIndex] = 0;
 	return HOOK_CONTINUE;
+}
+
+void FreezeUnfreeze( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue )
+{
+	if( pActivator is null || !pActivator.IsPlayer() )
+		return;
+		
+	if( ( pActivator.pev.flags & FL_FROZEN ) > 0 )
+	{
+		pActivator.pev.flags &= ~FL_FROZEN;
+	}
+	else
+	{
+		pActivator.pev.flags |= FL_FROZEN;
+	}
 }
 
 void ClearPlayerKeyValues( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue )
@@ -626,7 +660,7 @@ void CreateBomb( EHandle hPlayer )
 	CBasePlayer@ pPlayer = cast<CBasePlayer@>( hPlayer.GetEntity() );
 	CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
 	
-	if( pPlayer is null || !pPlayer.pev.FlagBitSet( FL_ONGROUND ) || pPlayer.pev.FlagBitSet( FL_INWATER ) || pPlayer.pev.FlagBitSet( FL_DUCKING ) )
+	if( pPlayer is null || !pPlayer.pev.FlagBitSet( FL_ONGROUND ) || pPlayer.pev.FlagBitSet( FL_INWATER ) || pPlayer.pev.FlagBitSet( FL_DUCKING ) || pPlayer.pev.FlagBitSet( FL_FROZEN ) )
 		return;
 	
 	if( !( kvPlayer is null ) and kvPlayer.HasKeyvalue( "$i_bombCount" ) and kvPlayer.HasKeyvalue( "$i_poisonType" ) )
@@ -894,7 +928,7 @@ void ClearSprites( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useTy
 		
 		while( ( @pCamera = g_EntityFuncs.FindEntityByClassname( pCamera, "trigger_camera" ) ) !is null )
 		{
-			if( pCamera is null )
+			if( pCamera is null || pCamera.pev.targetname == "podium_cam" )
 				continue;
 			
 			pCamera.Use( null, null, USE_OFF );
@@ -986,6 +1020,7 @@ class CFuncBomb : ScriptBaseEntity
 	private array<int> m_iPlayersOnBombTile;
 	private bool m_blOwnerInTile = true;
 	private bool m_blIsMoving = false;
+	private float m_fLastKickTime = g_Engine.time;
 	
 	void Precache()
 	{
@@ -1033,12 +1068,15 @@ class CFuncBomb : ScriptBaseEntity
 	
 	void Think()
 	{
-		self.pev.nextthink = g_Engine.time + 0.1;
+		self.pev.nextthink = g_Engine.time + 0.01;
 		
 		CBasePlayer@ pPlayerInBomb;
 		CBaseEntity@ pTile;
 		CBaseEntity@ pEntity;
 		CustomKeyvalues@ kvBomb = self.GetCustomKeyvalues();
+		
+		//For traces
+		Vector vecStart, vecEnd;
 		
 		m_iPlayersOnBombTile.resize(0);
 		m_iPlayersOnBombTile.resize(33);
@@ -1062,8 +1100,37 @@ class CFuncBomb : ScriptBaseEntity
 		
 		if( m_blIsMoving && self.pev.velocity == Vector( 0, 0, 0 ) )
 			m_blIsMoving = false;
+			
+		if( m_blIsMoving )
+		{
+			@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin, 1 , "info_tile" );
+			if( pTile !is null )
+			{
+				TraceResult trTileClear;
+				vecStart = pTile.pev.origin + Vector( 0, 0, 16 );
+				
+				if( self.pev.velocity.x > 0 )
+					vecEnd = self.pev.origin + Vector( 64, 0, 0 );
+				else if( self.pev.velocity.x < 0 )
+					vecEnd = self.pev.origin + Vector( -64, 0, 0 );
+				else if( self.pev.velocity.y > 0 )
+					vecEnd = self.pev.origin + Vector( 0, 64, 0 );
+				else if( self.pev.velocity.y < 0 )
+					vecEnd = self.pev.origin + Vector( 0, -64, 0 );
+				
+				g_Utility.TraceLine( vecStart, vecEnd, dont_ignore_monsters, self.edict(), trTileClear );
+				
+				if( trTileClear.flFraction < 1 )
+				{
+					self.pev.velocity = Vector( 0, 0, 0 );
+					m_blIsMoving = false;
+					return;
+				}
+			
+			}
+		}
 		
-		if( self.pev.solid == SOLID_BBOX && !m_blIsMoving )
+		if( self.pev.solid == SOLID_BBOX && !m_blIsMoving && m_fLastKickTime < g_Engine.time )
 		{
 			CBaseEntity@ pEntityContact;
 		
@@ -1078,21 +1145,40 @@ class CFuncBomb : ScriptBaseEntity
 			if( pEntityContact !is null && pEntityContact.IsPlayer() )
 			{
 				CustomKeyvalues@ kvEntityContact = pEntityContact.GetCustomKeyvalues();
+				
 				if( kvEntityContact.GetKeyvalue( "$i_canKick" ).GetInteger() == 1  )
 				{
-					m_blIsMoving = true;
 					float flXDiff = abs( self.pev.origin.x - pEntityContact.pev.origin.x );
 					float flYDiff = abs( self.pev.origin.y - pEntityContact.pev.origin.y );
-					if( self.pev.origin.x > pEntityContact.pev.origin.x && flXDiff >= 32 )
+					
+					if( self.pev.origin.x > pEntityContact.pev.origin.x && flXDiff >= 32 && IsNextTileClear( self.pev.origin + Vector( 64, 0, 0 ) ) )
+					{
 						self.pev.velocity.x = 400;
-					else if( self.pev.origin.x < pEntityContact.pev.origin.x && flXDiff >= 32 )
+						m_blIsMoving = true;
+						m_fLastKickTime = g_Engine.time + 0.5f;
+						g_SoundSystem.EmitSoundDyn( pEntityContact.edict(), CHAN_AUTO, "bman/kick.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );						
+					}
+					else if( self.pev.origin.x < pEntityContact.pev.origin.x && flXDiff >= 32 && IsNextTileClear( self.pev.origin + Vector( -64, 0, 0 ) ) )
+					{
 						self.pev.velocity.x = -400;
-					else if( self.pev.origin.y > pEntityContact.pev.origin.y && flYDiff >= 32 )
+						m_blIsMoving = true;
+						m_fLastKickTime = g_Engine.time + 0.5f;
+						g_SoundSystem.EmitSoundDyn( pEntityContact.edict(), CHAN_AUTO, "bman/kick.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );						
+					}
+					else if( self.pev.origin.y > pEntityContact.pev.origin.y && flYDiff >= 32 && IsNextTileClear( self.pev.origin + Vector( 0, 64, 0 ) ) )
+					{
 						self.pev.velocity.y = 400;
-					else if( self.pev.origin.y < pEntityContact.pev.origin.y && flYDiff >= 32 )
+						m_blIsMoving = true;
+						m_fLastKickTime = g_Engine.time + 0.5f;
+						g_SoundSystem.EmitSoundDyn( pEntityContact.edict(), CHAN_AUTO, "bman/kick.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );						
+					}
+					else if( self.pev.origin.y < pEntityContact.pev.origin.y && flYDiff >= 32 && IsNextTileClear( self.pev.origin + Vector( 0, -64, 0 ) ) )
+					{
 						self.pev.velocity.y = -400;
-						
-					g_SoundSystem.EmitSoundDyn( pEntityContact.edict(), CHAN_AUTO, "bman/kick.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
+						m_blIsMoving = true;
+						m_fLastKickTime = g_Engine.time + 0.5f;
+						g_SoundSystem.EmitSoundDyn( pEntityContact.edict(), CHAN_AUTO, "bman/kick.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
+					}
 				}
 			}
 		}
@@ -1134,7 +1220,7 @@ class CFuncBomb : ScriptBaseEntity
 			
 			for( int i = 1; i < iBombStrength + 1; i++ )
 			{
-				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( i * 64, 0, 0 ), 36 , "info_tile" );
+				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( i * 64, 0, 0 ), 28 , "info_tile" );
 				if( pTile !is null )
 				{
 					if( iX1Block > 0 )
@@ -1274,6 +1360,21 @@ class CFuncBomb : ScriptBaseEntity
 		}
 	}
 	
+	bool IsNextTileClear( Vector vecEnd )
+	{
+		//Raise it slightly so we don't trace within the floor
+		Vector vecStart = self.pev.origin + Vector( 0, 0, 1 );
+		
+		TraceResult trNextTile;
+		g_Utility.TraceLine( vecStart, vecEnd, dont_ignore_monsters, self.edict(), trNextTile );	
+
+		if( trNextTile.flFraction < 1 )
+			return false;
+		else
+			return true;
+	
+	}
+	
 	void te_breakmodel(Vector pos, Vector size, Vector velocity, 
 		uint8 speedNoise=16, string model=g_szBombGibModel, 
 		uint8 count=4, uint8 life=8, uint8 flags=2,
@@ -1388,7 +1489,7 @@ void ChoosePowerup( EHandle hCrate )
 	CBaseEntity@ pCrate = cast<CBaseEntity@>( hCrate.GetEntity() );
 	string szPowerup;
 	
-	if( Math.RandomLong( 1, 7 ) != 7 )
+	if( Math.RandomLong( 1, 6 ) != 6 )
 		return;
 		
 	dictionary powerupValues =

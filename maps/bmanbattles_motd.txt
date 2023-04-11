@@ -18,6 +18,7 @@ Powerups:
 - Heart: Increases your health, allowing you to survive 1 bomb blast.
 - Roller Skate: Increase speed.
 - Skull: Recieve a random disease.
+- Kick: Shoves bombs you touch in the direction you are moving in.
 
 Diseases last until you either die, pick up another powerup, or touch another player (which transfers the disease to them).
 
