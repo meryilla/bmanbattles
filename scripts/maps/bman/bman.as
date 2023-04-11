@@ -66,6 +66,7 @@ void MapInit()
 	g_Hooks.RegisterHook( Hooks::Player::PlayerPostThink, PlayerThink );
 	g_Hooks.RegisterHook( Hooks::Player::PlayerKilled, PlayerKilled );
 	g_Hooks.RegisterHook( Hooks::Player::ClientDisconnect, PlayerDisconnected );
+	g_Hooks.RegisterHook( Hooks::Player::ClientSay, ChatCheck );
 	
 	g_CustomEntityFuncs.RegisterCustomEntity( "CFuncBomb", "func_bomb" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CFuncCrate", "func_crate" );
@@ -86,6 +87,29 @@ void MapInit()
 	
 	if( blAntiCancerEnabled )
 		g_Scheduler.SetInterval( "AntiCancerDetection", 3.0f, g_Scheduler.REPEAT_INFINITE_TIMES );
+}
+
+HookReturnCode ChatCheck( SayParameters@ pParams )
+{
+	CBasePlayer@ pPlayer = pParams.GetPlayer();
+	const CCommand@ pArguments = pParams.GetArguments();
+	CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
+	
+	if( pPlayer is null )
+		return HOOK_CONTINUE;	
+	
+	if( pArguments[ 0 ] == ".debug" )
+	{
+		pParams.ShouldHide = true;
+		array<int> testArray = { 1, 5, 10, 12 };
+		array<int> testArray2 = ShuffleArray( testArray );
+		for( uint i = 0; i < testArray2.length(); i++ )
+		{
+			g_Game.AlertMessage( at_console, "" + testArray2[i] + "\n" );
+		}
+	}
+	
+	return HOOK_CONTINUE;
 }
 
 void CreateCamera( EHandle hPlayer )
@@ -420,20 +444,39 @@ void AssignPlayerSpawns( CBaseEntity@, CBaseEntity@, USE_TYPE, float flValue )
 	CBasePlayer@ pPlayer;
 	bool blCancerModel = false;
 	
-	//Find 16 players at most to spawn and assign them a spawnpoint each
+	array<int> playerIndices;
+	playerIndices.resize(0);
+	int iArrayIndex = 0;
+	
+	
+	//Construct playerIndices array
 	while( ( @pPlayer = cast<CBasePlayer@>( g_EntityFuncs.FindEntityByClassname( pPlayer, "player" ) ) ) !is null )
 	{
 		if( pPlayer is null || !pPlayer.IsConnected() )
 			continue;
+		
+		playerIndices.insertAt( iArrayIndex, pPlayer.entindex() );
+		iArrayIndex++;
+	}
+	
+	playerIndices = ShuffleArray( playerIndices );
+	
+	//Find 16 players at most to spawn and assign them a spawnpoint each
+	for( uint i = 0; i < playerIndices.length(); i++ )
+	{
+		@pPlayer = g_PlayerFuncs.FindPlayerByIndex( playerIndices[i] );
+		
+		if( pPlayer is null || !pPlayer.IsConnected() )
+			continue;		
 		
 		KeyValueBuffer@ pInfo = g_EngineFuncs.GetInfoKeyBuffer( pPlayer.edict() );
 		
 		//If Anti-Cancer is enabled, ban players with shitty player models from playing
 		if( blAntiCancerEnabled )
 		{
-			for( uint i = 0; i < CancerModels.length(); i++ )
+			for( uint j = 0; j < CancerModels.length(); j++ )
 			{
-				if( pInfo.GetValue( "model" ).Find( CancerModels[i], 0 ) != String::INVALID_INDEX )
+				if( pInfo.GetValue( "model" ).Find( CancerModels[j], 0 ) != String::INVALID_INDEX )
 					blCancerModel = true;
 			}
 			
@@ -486,6 +529,22 @@ void AssignPlayerSpawns( CBaseEntity@, CBaseEntity@, USE_TYPE, float flValue )
 	}
 	
 	return;	
+}
+
+array<int> ShuffleArray( array<int> inputArray )
+{
+	int iRandomIndex, iTemp;
+	int iCurrentIndex = inputArray.length() - 1;
+	
+	for( iCurrentIndex; iCurrentIndex > 0; iCurrentIndex-- )
+	{
+		iRandomIndex = Math.RandomLong( 0, iCurrentIndex );
+		iTemp = inputArray[iCurrentIndex];
+		inputArray[iCurrentIndex] = inputArray[iRandomIndex];
+		inputArray[iRandomIndex] = iTemp;
+	}
+	
+	return inputArray;
 }
 
 void UpdateScoresDraw( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue )
