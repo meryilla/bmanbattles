@@ -4,6 +4,7 @@ class CFuncBomb : ScriptBaseEntity
 	private array<int> m_iPlayersOnBombTile;
 	private bool m_blOwnerInTile = true;
 	private bool m_blIsMoving = false;
+	private bool m_blCanPierce = false;
 	private float m_fLastKickTime = g_Engine.time;
 	
 	void Precache()
@@ -19,6 +20,18 @@ class CFuncBomb : ScriptBaseEntity
 		g_SoundSystem.PrecacheSound( "weapons/explode4.wav" );
 		g_SoundSystem.PrecacheSound( "weapons/explode5.wav" );		
 	}
+	
+	bool KeyValue( const string& in szKey, const string& in szValue )
+	{
+		if( szKey == "canPierce" )
+		{
+			m_blCanPierce = atobool( szValue );
+		}
+		else
+			return BaseClass.KeyValue( szKey, szValue );
+		
+		return true;
+	}	
 
 	void Spawn()
 	{
@@ -38,15 +51,26 @@ class CFuncBomb : ScriptBaseEntity
 		
 		int iBombSize = kvBomb.GetKeyvalue( "$i_bombStrength" ).GetInteger();
 		
-		if( iBombSize == 3 )
-			g_EntityFuncs.SetModel( self, g_szBombModel3 );
-		else if( iBombSize == 2 )
-			g_EntityFuncs.SetModel( self, g_szBombModel2 );
+		if( m_blCanPierce )
+		{
+			if( iBombSize == 3 )
+				g_EntityFuncs.SetModel( self, g_szPenBombModel3 );
+			else if( iBombSize == 2 )
+				g_EntityFuncs.SetModel( self, g_szPenBombModel2 );
+			else
+				g_EntityFuncs.SetModel( self, g_szPenBombModel1 );
+		}
 		else
-			g_EntityFuncs.SetModel( self, g_szBombModel1 );
-		
+		{
+			if( iBombSize == 3 )
+				g_EntityFuncs.SetModel( self, g_szBombModel3 );
+			else if( iBombSize == 2 )
+				g_EntityFuncs.SetModel( self, g_szBombModel2 );
+			else
+				g_EntityFuncs.SetModel( self, g_szBombModel1 );		
+		}
 		g_SoundSystem.EmitSoundDyn( self.edict(), CHAN_STREAM, "weapons/xbow_hitbod2.wav", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
-		
+
 		m_flExplodeTime = g_Engine.time + 4;
 	}
 	
@@ -216,7 +240,7 @@ class CFuncBomb : ScriptBaseEntity
 							continue;
 						
 						pEntity.TakeDamage( self.pev, self.pev, 50, DMG_BLAST );
-						if( pEntity.pev.classname == "func_crate" )
+						if( pEntity.pev.classname == "func_crate" && !m_blCanPierce )
 							iX1Block++;
 						
 						if( pEntity.pev.classname == "func_bomb" )
@@ -249,7 +273,7 @@ class CFuncBomb : ScriptBaseEntity
 							continue;
 						
 						pEntity.TakeDamage( self.pev, self.pev, 50, DMG_BLAST );
-						if( pEntity.pev.classname == "func_crate" )
+						if( pEntity.pev.classname == "func_crate" && !m_blCanPierce )
 							iX2Block++;			
 						
 						if( pEntity.pev.classname == "func_bomb" )
@@ -282,7 +306,7 @@ class CFuncBomb : ScriptBaseEntity
 							continue;
 						
 						pEntity.TakeDamage( self.pev, self.pev, 50, DMG_BLAST );
-						if( pEntity.pev.classname == "func_crate" )
+						if( pEntity.pev.classname == "func_crate" && !m_blCanPierce )
 							iY1Block++;		
 						
 						if( pEntity.pev.classname == "func_bomb" )
@@ -315,7 +339,7 @@ class CFuncBomb : ScriptBaseEntity
 							continue;
 						
 						pEntity.TakeDamage( self.pev, self.pev, 50, DMG_BLAST );
-						if( pEntity.pev.classname == "func_crate" )
+						if( pEntity.pev.classname == "func_crate" && !m_blCanPierce )
 							iY2Block++;	
 						
 						if( pEntity.pev.classname == "func_bomb" )

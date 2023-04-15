@@ -435,3 +435,155 @@ class CPowerupKick : ScriptBaseAnimating
 		self.pev.nextthink = g_Engine.time + 0.1f;
 	}			
 }
+
+class CPowerupFullFire : ScriptBaseAnimating
+{
+	private float m_flNextTouchTime;
+	
+	void Spawn()
+	{
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 6 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
+		
+		self.pev.solid = SOLID_SLIDEBOX;
+		self.pev.movetype = MOVETYPE_PUSHSTEP;
+		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();	
+		
+		self.pev.targetname = "powerup_fullfire_powerup";
+		
+		if( self.pev.health == 0.0f )
+			self.pev.health = g_iExplodeDamage;
+		
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+	
+	void Think()
+	{
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
+		
+		if( pEntity !is null )
+		{
+			if( pEntity.IsPlayer() )
+			{
+				CBasePlayer@ pPlayer = cast<CBasePlayer@>( pEntity );
+				ClearPoison( pPlayer );
+				g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "1" );
+				HudHelp( pPlayer );
+				self.Killed( null, 0 );
+			}
+			g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
+		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+
+	void HudHelp( EHandle hPlayer )
+	{
+		if( !hPlayer )
+			return;
+		
+		CBasePlayer@ pPlayer = cast<CBasePlayer@>( hPlayer.GetEntity() );
+			
+		HUDTextParams PowerupHudText;		
+		PowerupHudText.x = -1;
+		PowerupHudText.y = 0.7;
+		PowerupHudText.effect = 0;
+		PowerupHudText.r1 = 255;
+		PowerupHudText.g1 = 100;
+		PowerupHudText.b1 = 100;
+		PowerupHudText.a1 = 0;
+		PowerupHudText.r2 = 255;
+		PowerupHudText.g2 = 100;
+		PowerupHudText.b2 = 100;
+		PowerupHudText.a2 = 0;
+		PowerupHudText.fadeinTime = 0; 
+		PowerupHudText.fadeoutTime = 1;
+		PowerupHudText.holdTime = 10;
+		PowerupHudText.fxTime = 0;
+		PowerupHudText.channel = 2;	
+		
+		g_PlayerFuncs.HudMessage( pPlayer, PowerupHudText, "PRESS RELOAD KEY TO PLACE NUKE" );
+		
+	}
+}
+
+class CPowerupPierce : ScriptBaseAnimating
+{
+	private float m_flNextTouchTime;
+	
+	void Spawn()
+	{
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 9 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
+		
+		self.pev.solid = SOLID_SLIDEBOX;
+		self.pev.movetype = MOVETYPE_PUSHSTEP;
+		self.pev.takedamage = DAMAGE_YES;
+		
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();	
+		
+		self.pev.targetname = "powerup_pierce_powerup";
+		
+		if( self.pev.health == 0.0f )
+			self.pev.health = g_iExplodeDamage;
+		
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+	
+	void Think()
+	{
+		CBaseEntity@ pEntity;
+		
+		while( ( @pEntity = g_EntityFuncs.FindEntityByClassname( pEntity, "player" ) ) !is null )
+		{
+			if( self.Intersects( pEntity ) )
+				break;
+			else
+				continue;
+		}
+		
+		if( pEntity !is null )
+		{
+			if( pEntity.IsPlayer() )
+			{
+				CBasePlayer@ pPlayer = cast<CBasePlayer@>( pEntity );
+				ClearPoison( pPlayer );
+				g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_pierce", "true" );
+				self.Killed( null, 0 );
+			}
+			g_SoundSystem.PlaySound( pEntity.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pEntity.entindex(), true, pEntity.GetOrigin() );
+		}
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}			
+}

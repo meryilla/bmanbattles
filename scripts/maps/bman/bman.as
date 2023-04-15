@@ -8,15 +8,19 @@ By Meryilla
 */
 
 //Models
-const string g_szBombModel1 = "models/bman/bomb_small_b.mdl";
-const string g_szBombModel2 = "models/bman/bomb_med_b.mdl";
-const string g_szBombModel3 = "models/bman/bomb_large_b.mdl";
+const string g_szBombModel1 = "models/bman/bomb_small_b.mdl"; //0.8
+const string g_szBombModel2 = "models/bman/bomb_med_b.mdl";  //1.0
+const string g_szBombModel3 = "models/bman/bomb_large_b.mdl";  //1.3
 const string g_szAntiDelayBombModel = "models/bman/bomb_antidelay_a.mdl";
 const string g_szBronzeBombModel = "models/bman/bomb_bronze_a.mdl";
 const string g_szSilverBombModel = "models/bman/bomb_silver_a.mdl";
 const string g_szGoldBombModel = "models/bman/bomb_gold_a.mdl";
 const string g_szPowerupModel = "models/bman/bman_powerup_a.mdl";
 const string g_szBombGibModel = "models/metalplategibs_dark.mdl";
+const string g_szNukeBombModel = "models/bman/bomb_golem_a.mdl";
+const string g_szPenBombModel1 = "models/bman/bomb_pen_small_a.mdl";
+const string g_szPenBombModel2 = "models/bman/bomb_pen_med_a.mdl";
+const string g_szPenBombModel3 = "models/bman/bomb_pen_large_a.mdl";
 //Player Models
 const string g_szWhitePlayerModel = "models/player/bman_white/bman_white.mdl";
 const string g_szPinkPlayerModel = "models/player/bman_pink/bman_pink.mdl";
@@ -28,8 +32,8 @@ const string g_szExplosionSprite = "sprites/rc/rc_explosion2HD.spr";
 const int g_iExplodeDamage = 50;
 
 //Variables
-const bool blAntiCancerEnabled = true; //If this is enabled, players are slayed/refused play if they are using annoying player models 
-bool blClassicCamEnabled = false;  //If enabled, sets camera to top-down view like in original bomberman. Is very laggy with 150+ ping.
+const bool blAntiCancerEnabled = true; //If enabled, players are slayed/refused play if they are using annoying player models 
+bool blClassicCamEnabled = false;  //If enabled, sets camera to top-down view like in original bomberman. Very laggy with 150+ ping.
 int g_iActivePlayerCount = 0;
 array<float> g_flPlayerScores;
 array<float> g_flSortedPlayerScores;
@@ -76,6 +80,8 @@ void MapInit()
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupSkate", "func_powerup_skate" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupSkull", "func_powerup_skull" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupKick", "func_powerup_kick" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupFullFire", "func_powerup_fullfire" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupPierce", "func_powerup_pierce" );
 	
 	g_flPlayerScores.resize( 0 );
 	g_flPlayerScores.resize( 33 );
@@ -108,7 +114,6 @@ HookReturnCode ChatCheck( SayParameters@ pParams )
 			g_Game.AlertMessage( at_console, "" + testArray2[i] + "\n" );
 		}
 	}
-	
 	return HOOK_CONTINUE;
 }
 
@@ -152,6 +157,10 @@ void Precache()
 	g_Game.PrecacheModel( g_szAntiDelayBombModel );
 	g_Game.PrecacheModel( g_szPowerupModel );
 	g_Game.PrecacheModel( g_szBombGibModel );
+	g_Game.PrecacheModel( g_szNukeBombModel );
+	g_Game.PrecacheModel( g_szPenBombModel1 );
+	g_Game.PrecacheModel( g_szPenBombModel2 );
+	g_Game.PrecacheModel( g_szPenBombModel3 );	
 	g_Game.PrecacheModel( "models/woodgibs.mdl" );
 	//Player models
 	g_Game.PrecacheModel( g_szWhitePlayerModel );
@@ -236,7 +245,7 @@ HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 	
 	if( kvPlayer !is null and kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() == 4 )
 	{
-		CreateBomb( pPlayer );
+		CreateBomb( pPlayer, false );
 		CBaseEntity@ pSound = g_EntityFuncs.FindEntityByTargetname( pSound, "" + pPlayer.pev.targetname + "_scream" );
 		if( pSound !is null )
 			pSound.SetOrigin( pPlayer.GetOrigin() );
@@ -309,6 +318,16 @@ HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 			pPlayer.pev.fixangle = FAM_NOTHING;
 	}
 	
+	//Place special bombs
+	if( ( pPlayer.m_afButtonPressed & IN_RELOAD ) > 0 && kvPlayer.GetKeyvalue( "$i_fullfire" ).GetInteger() > 0 )
+	{
+		CreateBomb( pPlayer, true );
+	}
+	else if( ( pPlayer.m_afButtonPressed & IN_RELOAD ) > 0 && kvPlayer.GetKeyvalue( "$i_fullfire" ).GetInteger() == 0 )
+	{
+		g_EngineFuncs.ClientPrintf( pPlayer, print_center, "You have no special bombs to plant\n" );
+	}
+	
 	return HOOK_CONTINUE;
 }
 
@@ -326,7 +345,6 @@ HookReturnCode PlayerSpawn( CBasePlayer@ pPlayer )
 	}
 	
 	return HOOK_CONTINUE;
-	
 }
 
 HookReturnCode TakeDamage( DamageInfo@ pDamageInfo )
@@ -372,6 +390,8 @@ HookReturnCode SetPlayerValues( CBasePlayer@ pPlayer )
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_hasPoisonSprite", "0" );
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_activePlayer", "0" );
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_canKick", "0" );
+	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "1" );
+	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_pierce", "false" );
 	
 	pPlayer.pev.frags = 0;
 	int iPlayerIndex = pPlayer.entindex();
@@ -412,6 +432,8 @@ void ClearPlayerKeyValues( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TY
 			g_EntityFuncs.DispatchKeyValue( pEntity.edict(), "$s_hasPoisonSprite", "0" );
 			g_EntityFuncs.DispatchKeyValue( pEntity.edict(), "$i_activePlayer", "0" );
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_canKick", "0" );
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "0" );
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_pierce", "false" );
 			pPlayer.pev.targetname = "";
 			pPlayer.pev.health = 50;
 			pPlayer.SetMaxSpeed( 200 );
@@ -433,7 +455,7 @@ HookReturnCode PlantBomb( CBasePlayer@ pPlayer, uint& out uiFlags )
 			g_EngineFuncs.ClientPrintf( pPlayer, print_center, "Cannot place bombs whilst constipated!\n" );
 			return HOOK_CONTINUE;
 		}
-		CreateBomb( pPlayer );
+		CreateBomb( pPlayer, false );
 	}
 	return HOOK_CONTINUE;	
 }
@@ -679,7 +701,7 @@ void AntiCancerDetection()
 	}
 }
 
-void CreateBomb( EHandle hPlayer )
+void CreateBomb( EHandle hPlayer, bool blIsNuke )
 {
 	CBaseEntity@ pBomb;
 	CBaseEntity@ pOtherBomb;
@@ -711,15 +733,27 @@ void CreateBomb( EHandle hPlayer )
 	if( pTile !is null )
 	{
 		dictionary bombValues;
-		if( kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() == 3 )
+		if( kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() == 3 && !blIsNuke )
 		{
 			bombValues =
 			{
 				{ "origin", "" + ( pTile.pev.origin ).ToString() },
 				{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
 				{ "$i_ownerIndex", "" + pPlayer.entindex() },
-				{ "$i_bombStrength", "1" }
+				{ "$i_bombStrength", "1" },
+				{ "canPierce", "" + kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() }
 			};
+		}
+		else if( blIsNuke )
+		{
+			bombValues =
+			{
+				{ "origin", "" + ( pTile.pev.origin ).ToString() },
+				{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
+				{ "$i_ownerIndex", "" + pPlayer.entindex() },
+				{ "$i_bombStrength", "999" },
+				{ "canPierce", "" + kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() }
+			};		
 		}
 		else
 		{
@@ -728,11 +762,18 @@ void CreateBomb( EHandle hPlayer )
 				{ "origin", "" + ( pTile.pev.origin ).ToString() },
 				{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
 				{ "$i_ownerIndex", "" + pPlayer.entindex() },
-				{ "$i_bombStrength", "" + kvPlayer.GetKeyvalue( "$i_ownBombStrength" ).GetString() }
+				{ "$i_bombStrength", "" + kvPlayer.GetKeyvalue( "$i_ownBombStrength" ).GetString() },
+				{ "canPierce", "" + kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() }
 			};
 		}
 
 		@pBomb = g_EntityFuncs.CreateEntity( "func_bomb", bombValues, true);
+		if( blIsNuke )
+		{
+			g_EntityFuncs.SetModel( pBomb, g_szNukeBombModel );
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "0" );
+		}
+			
 		g_EntityFuncs.SetSize( pBomb.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 		
 		pBomb.pev.targetname = "player_bomb_PID" + pPlayer.entindex() + "_EID" + pBomb.entindex();
@@ -741,8 +782,65 @@ void CreateBomb( EHandle hPlayer )
 		{
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_bombCount", string( kvPlayer.GetKeyvalue( "$i_bombCount" ).GetInteger() + 1 ) );
 		}
+		
+		
 	}
 }
+
+//void CreateFullFireBomb( EHandle hPlayer )
+//{
+//	CBaseEntity@ pBomb;
+//	CBaseEntity@ pOtherBomb;
+//	CBaseEntity@ pTile;
+//	CBasePlayer@ pPlayer = cast<CBasePlayer@>( hPlayer.GetEntity() );
+//	CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
+//	
+//	if( pPlayer is null || !pPlayer.pev.FlagBitSet( FL_ONGROUND ) || pPlayer.pev.FlagBitSet( FL_INWATER ) || pPlayer.pev.FlagBitSet( FL_DUCKING ) || pPlayer.pev.FlagBitSet( FL_FROZEN ) )
+//		return;
+//	
+//	if( !( kvPlayer is null ) and kvPlayer.HasKeyvalue( "$i_bombCount" ) and kvPlayer.HasKeyvalue( "$i_poisonType" ) )
+//	{
+//		if( ( kvPlayer.GetKeyvalue( "$i_bombCount" ).GetInteger() >= kvPlayer.GetKeyvalue( "$i_maxBombCount" ).GetInteger() ) and kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() != 4 )
+//		{
+//			g_EngineFuncs.ClientPrintf( pPlayer, print_center, "You can't have more than " + kvPlayer.GetKeyvalue( "$i_maxBombCount" ).GetString() + " bomb(s)\n" );
+//			return;
+//		}
+//	}	
+//	
+//	@pOtherBomb = g_EntityFuncs.FindEntityInSphere( null, pPlayer.pev.origin - Vector( 0, 0, 32 ), 28 , "func_bomb", "classname" );
+//	if( pOtherBomb !is null )
+//	{
+//		if( kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() != 4 )
+//			g_EngineFuncs.ClientPrintf( pPlayer, print_center, "There is already a bomb on this tile\n" );
+//		return;
+//	}
+//	
+//	@pTile = g_EntityFuncs.FindEntityInSphere( null, pPlayer.pev.origin - Vector( 0, 0, 32 ), 28 , "info_tile" );
+//	if( pTile !is null )
+//	{
+//		dictionary bombValues;
+//		
+//		bombValues =
+//		{
+//			{ "origin", "" + ( pTile.pev.origin ).ToString() },
+//			{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
+//			{ "$i_ownerIndex", "" + pPlayer.entindex() },
+//			{ "$i_bombStrength", "999" }
+//		};
+//
+//		@pBomb = g_EntityFuncs.CreateEntity( "func_bomb", bombValues, true);
+//		g_EntityFuncs.SetModel( pBomb, g_szGoldBombModel );
+//		g_EntityFuncs.SetSize( pBomb.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
+//		
+//		pBomb.pev.targetname = "player_bomb_PID" + pPlayer.entindex() + "_EID" + pBomb.entindex();
+//		
+//		if( !( kvPlayer is null ) and kvPlayer.HasKeyvalue( "$i_bombCount" ) )
+//		{
+//			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_bombCount", string( kvPlayer.GetKeyvalue( "$i_bombCount" ).GetInteger() + 1 ) );
+//		}
+//	}
+//	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "0" );
+//}
 
 void UnattachBomb( EHandle hPlayer )
 {
@@ -1123,7 +1221,7 @@ void ChoosePowerup( EHandle hCrate )
 		{ "origin", "" + ( pCrate.pev.origin ).ToString() }
 	};
 		
-	int iPowerupChance = Math.RandomLong( 1, 11 );
+	int iPowerupChance = Math.RandomLong( 1, 13 );
 	
 	//There's got to be a better way than this...
 	if( iPowerupChance <= 3 )
@@ -1136,10 +1234,14 @@ void ChoosePowerup( EHandle hCrate )
 		szPowerup = "func_powerup_life";
 	else if( iPowerupChance == 10 ) 
 		szPowerup = "func_powerup_kick";
+	else if( iPowerupChance == 11 ) 
+		szPowerup = "func_powerup_fullfire";	
+	else if( iPowerupChance == 12 ) 
+		szPowerup = "func_powerup_pierce";
 	else
 		szPowerup = "func_powerup_skull";
 		
-	CBaseEntity@ pPowerup = g_EntityFuncs.CreateEntity( szPowerup, powerupValues, true);
+	CBaseEntity@ pPowerup = g_EntityFuncs.CreateEntity( szPowerup, powerupValues, true );
 	g_EntityFuncs.SetSize( pPowerup.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
 
 }
