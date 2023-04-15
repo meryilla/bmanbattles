@@ -1221,25 +1221,25 @@ void ChoosePowerup( EHandle hCrate )
 		{ "origin", "" + ( pCrate.pev.origin ).ToString() }
 	};
 		
-	int iPowerupChance = Math.RandomLong( 1, 13 );
+	int iPowerupChance = Math.RandomLong( 1, 18 );
 	
 	//There's got to be a better way than this...
-	if( iPowerupChance <= 3 )
+	if( iPowerupChance <= 5 )
 		szPowerup = "func_powerup_bomb";
-	else if( iPowerupChance > 3 && iPowerupChance <= 6 )
+	else if( iPowerupChance > 5 && iPowerupChance <= 10 )
 		szPowerup = "func_powerup_fire";
-	else if( iPowerupChance > 6 && iPowerupChance <= 8 )
+	else if( iPowerupChance > 10 && iPowerupChance <= 13 )
 		szPowerup = "func_powerup_skate";
-	else if( iPowerupChance == 9 )
+	else if( iPowerupChance == 14 )
 		szPowerup = "func_powerup_life";
-	else if( iPowerupChance == 10 ) 
+	else if( iPowerupChance == 15 ) 
 		szPowerup = "func_powerup_kick";
-	else if( iPowerupChance == 11 ) 
+	else if( iPowerupChance == 16 ) 
 		szPowerup = "func_powerup_fullfire";	
-	else if( iPowerupChance == 12 ) 
+	else if( iPowerupChance == 17 ) 
 		szPowerup = "func_powerup_pierce";
 	else
-		szPowerup = "func_powerup_skull";
+		szPowerup = "func_powerup_skull";	
 		
 	CBaseEntity@ pPowerup = g_EntityFuncs.CreateEntity( szPowerup, powerupValues, true );
 	g_EntityFuncs.SetSize( pPowerup.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
