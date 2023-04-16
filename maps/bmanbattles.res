@@ -11,8 +11,12 @@ models/bman/bman_powerup_a.mdl
 models/bman/bomb_antidelay_a.mdl
 models/bman/bomb_bronze_a.mdl
 models/bman/bomb_gold_a.mdl
+models/bman/bomb_golem_a.mdl
 models/bman/bomb_large_b.mdl
 models/bman/bomb_med_b.mdl
+models/bman/bomb_pen_large_a.mdl
+models/bman/bomb_pen_med_a.mdl
+models/bman/bomb_pen_small_a.mdl
 models/bman/bomb_silver_a.mdl
 models/bman/bomb_small_b.mdl
 models/player/bman_black/bman_black.bmp

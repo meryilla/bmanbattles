@@ -92,7 +92,7 @@ void MapInit()
 	Precache();
 	
 	if( blAntiCancerEnabled )
-		g_Scheduler.SetInterval( "AntiCancerDetection", 3.0f, g_Scheduler.REPEAT_INFINITE_TIMES );
+		g_Scheduler.SetInterval( "AntiCancerDetection", 1.0f, g_Scheduler.REPEAT_INFINITE_TIMES );
 }
 
 HookReturnCode ChatCheck( SayParameters@ pParams )
@@ -672,33 +672,24 @@ void AntiCancerDetection()
 {
 	int iPlayerCount = 1;
 	CBasePlayer@ pPlayer;
-	bool blActiveCancerModel = false;
-	
-	while( ( @pPlayer = cast<CBasePlayer@>( g_EntityFuncs.FindEntityByClassname( pPlayer, "player" ) ) ) !is null )
+
+	for( int i = 1; i <= g_Engine.maxClients; i++ ) 
 	{
-		if( pPlayer is null )
+		@pPlayer = g_PlayerFuncs.FindPlayerByIndex(i);
+		if( pPlayer is null || !pPlayer.IsConnected() ) 
 			continue;
 		
-		CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
 		KeyValueBuffer@ pInfo = g_EngineFuncs.GetInfoKeyBuffer( pPlayer.edict() );
-		
-		if( kvPlayer !is null and kvPlayer.GetKeyvalue( "$i_activePlayer" ).GetInteger() == 1 )
+		for( uint j = 0; j < CancerModels.length(); j++ )
 		{
-			for( uint i = 0; i < CancerModels.length(); i++ )
+			if( pInfo.GetValue( "model" ).Find( CancerModels[j], 0 ) != String::INVALID_INDEX )
 			{
-				if( pInfo.GetValue( "model" ).Find( CancerModels[i], 0 ) != String::INVALID_INDEX )
-				{
-					blActiveCancerModel = true;
-				}
-			}
-			if( blActiveCancerModel )
-			{
-				g_PlayerFuncs.ClientPrintAll(HUD_PRINTTALK, "[AntiCancer] " + pPlayer.pev.netname + " was killed for switching to a cancerous model!\n");
-				pPlayer.TakeDamage( pPlayer.pev, pPlayer.pev, 10000000, DMG_BLAST );
-				blActiveCancerModel = false;
+				g_PlayerFuncs.ClientPrint( pPlayer, HUD_PRINTTALK, "[AntiCancer] This player model is forbidden.\n");
+				pPlayer.SetOverriddenPlayerModel( "helmet" );
+				break;
 			}
 		}	
-	}
+	}	
 }
 
 void CreateBomb( EHandle hPlayer, bool blIsNuke )
@@ -786,61 +777,6 @@ void CreateBomb( EHandle hPlayer, bool blIsNuke )
 		
 	}
 }
-
-//void CreateFullFireBomb( EHandle hPlayer )
-//{
-//	CBaseEntity@ pBomb;
-//	CBaseEntity@ pOtherBomb;
-//	CBaseEntity@ pTile;
-//	CBasePlayer@ pPlayer = cast<CBasePlayer@>( hPlayer.GetEntity() );
-//	CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
-//	
-//	if( pPlayer is null || !pPlayer.pev.FlagBitSet( FL_ONGROUND ) || pPlayer.pev.FlagBitSet( FL_INWATER ) || pPlayer.pev.FlagBitSet( FL_DUCKING ) || pPlayer.pev.FlagBitSet( FL_FROZEN ) )
-//		return;
-//	
-//	if( !( kvPlayer is null ) and kvPlayer.HasKeyvalue( "$i_bombCount" ) and kvPlayer.HasKeyvalue( "$i_poisonType" ) )
-//	{
-//		if( ( kvPlayer.GetKeyvalue( "$i_bombCount" ).GetInteger() >= kvPlayer.GetKeyvalue( "$i_maxBombCount" ).GetInteger() ) and kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() != 4 )
-//		{
-//			g_EngineFuncs.ClientPrintf( pPlayer, print_center, "You can't have more than " + kvPlayer.GetKeyvalue( "$i_maxBombCount" ).GetString() + " bomb(s)\n" );
-//			return;
-//		}
-//	}	
-//	
-//	@pOtherBomb = g_EntityFuncs.FindEntityInSphere( null, pPlayer.pev.origin - Vector( 0, 0, 32 ), 28 , "func_bomb", "classname" );
-//	if( pOtherBomb !is null )
-//	{
-//		if( kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() != 4 )
-//			g_EngineFuncs.ClientPrintf( pPlayer, print_center, "There is already a bomb on this tile\n" );
-//		return;
-//	}
-//	
-//	@pTile = g_EntityFuncs.FindEntityInSphere( null, pPlayer.pev.origin - Vector( 0, 0, 32 ), 28 , "info_tile" );
-//	if( pTile !is null )
-//	{
-//		dictionary bombValues;
-//		
-//		bombValues =
-//		{
-//			{ "origin", "" + ( pTile.pev.origin ).ToString() },
-//			{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
-//			{ "$i_ownerIndex", "" + pPlayer.entindex() },
-//			{ "$i_bombStrength", "999" }
-//		};
-//
-//		@pBomb = g_EntityFuncs.CreateEntity( "func_bomb", bombValues, true);
-//		g_EntityFuncs.SetModel( pBomb, g_szGoldBombModel );
-//		g_EntityFuncs.SetSize( pBomb.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
-//		
-//		pBomb.pev.targetname = "player_bomb_PID" + pPlayer.entindex() + "_EID" + pBomb.entindex();
-//		
-//		if( !( kvPlayer is null ) and kvPlayer.HasKeyvalue( "$i_bombCount" ) )
-//		{
-//			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_bombCount", string( kvPlayer.GetKeyvalue( "$i_bombCount" ).GetInteger() + 1 ) );
-//		}
-//	}
-//	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "0" );
-//}
 
 void UnattachBomb( EHandle hPlayer )
 {
