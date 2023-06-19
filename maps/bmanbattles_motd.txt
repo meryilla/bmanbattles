@@ -14,11 +14,13 @@ There are either 10 or 5 rounds in total, determined by a vote at map start. The
 Powerups:
 
 - Bomb: Allows you place an extra bomb, up to a maximum of 3 at once.
-- F: Extends range of bombs by 1, up to a maximum range of 3 tiles.
+- Fire: Extends range of bombs by 1, up to a maximum range of 3 tiles.
 - Heart: Increases your health, allowing you to survive 1 bomb blast.
 - Roller Skate: Increase speed.
-- Skull: Recieve a random disease.
 - Kick: Shoves bombs you touch in the direction you are moving in.
+- Pierce: Bombs can pierce through crates.
+- FullFire: Players can place a one-time use bomb using the RELOAD key, which has max range.
+- Skull: Recieve a random disease.
 
 Diseases last until you either die, pick up another powerup, or touch another player (which transfers the disease to them).
 
