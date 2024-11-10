@@ -51,6 +51,20 @@ array<string> 	CrateDeathSoundEvents = {
 				"debris/bustcrate3.wav"
 };
 
+array<string> AllSounds = {
+	"weapons/explode3.wav"
+	"weapons/explode4.wav",
+	"weapons/explode5.wav",
+	"bman/item_get.mp3",
+	"bman/skull.mp3",
+	"bman/kick.mp3",
+	g_szScreamSound,
+	"debris/bustcrate1.wav",
+	"debris/bustcrate2.wav",
+	"debris/bustcrate3.wav",
+	"bman/timer.ogg"
+};
+
 //Add substrings to the array below for the anti-cancer system to prevent players using models containing said substring
 array<string>	CancerModels = {
 
@@ -169,18 +183,11 @@ void Precache()
 	g_Game.PrecacheModel( "sprites/bman/bonus_bomb3.spr" );
 	g_Game.PrecacheModel( "sprites/bman/timer.spr" );
 	//Sounds
-	g_SoundSystem.PrecacheSound( "weapons/explode3.wav" );
-	g_SoundSystem.PrecacheSound( "weapons/explode4.wav" );
-	g_SoundSystem.PrecacheSound( "weapons/explode5.wav" );
-	g_SoundSystem.PrecacheSound( "bman/item_get.mp3" );
-	g_SoundSystem.PrecacheSound( "bman/skull.mp3" );
-	g_SoundSystem.PrecacheSound( "bman/kick.mp3" );
-	g_SoundSystem.PrecacheSound( g_szScreamSound );
-	g_SoundSystem.PrecacheSound( "debris/bustcrate1.wav" );
-	g_SoundSystem.PrecacheSound( "debris/bustcrate2.wav" );
-	g_SoundSystem.PrecacheSound( "debris/bustcrate3.wav" );
-	g_SoundSystem.PrecacheSound( "bman/timer.ogg" );
-
+	for( uint i = 0; i < AllSounds.length(); i++ )
+	{
+		g_SoundSystem.PrecacheSound( AllSounds[i] );
+		g_Game.PrecacheGeneric( "sound/" + AllSounds[i] );
+	}
 }
 
 HookReturnCode PlayerKilled( CBasePlayer@ pPlayer, CBaseEntity@ pAttacker, int iGib )
