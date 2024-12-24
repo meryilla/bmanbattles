@@ -5,6 +5,9 @@ class CFuncBomb : ScriptBaseEntity
 	private bool m_blOwnerInTile = true;
 	private bool m_blIsMoving = false;
 	private bool m_blCanPierce = false;
+	private bool m_blCanBounce = false;
+	private bool m_blIsRemote = false;
+	private float m_flLastTouchTime = g_Engine.time;
 	private float m_fLastKickTime = g_Engine.time;
 
 	void Precache()
@@ -27,6 +30,14 @@ class CFuncBomb : ScriptBaseEntity
 		{
 			m_blCanPierce = atobool( szValue );
 		}
+		else if( szKey == "canBounce" )
+		{
+			m_blCanBounce = atobool( szValue );
+		}
+		else if( szKey == "$s_isRemote" )
+		{
+			m_blIsRemote = atobool( szValue );
+		}
 		else
 			return BaseClass.KeyValue( szKey, szValue );
 
@@ -38,7 +49,10 @@ class CFuncBomb : ScriptBaseEntity
 		Precache();
 
 		self.pev.solid = SOLID_NOT;
-		self.pev.movetype = MOVETYPE_FLY;
+		if( m_blCanBounce )
+			self.pev.movetype = MOVETYPE_BOUNCEMISSILE;
+		else
+			self.pev.movetype = MOVETYPE_FLY;
 		self.pev.rendermode = 4;
 		self.pev.renderamt = 125;
 		self.pev.nextthink = g_Engine.time + 0.2;
@@ -59,6 +73,15 @@ class CFuncBomb : ScriptBaseEntity
 				g_EntityFuncs.SetModel( self, g_szPenBombModel2 );
 			else
 				g_EntityFuncs.SetModel( self, g_szPenBombModel1 );
+		}
+		else if( m_blIsRemote )
+		{
+			if( iBombSize == 3 )
+				g_EntityFuncs.SetModel( self, g_szRemoteBombModel3 );
+			else if( iBombSize == 2 )
+				g_EntityFuncs.SetModel( self, g_szRemoteBombModel2 );
+			else
+				g_EntityFuncs.SetModel( self, g_szRemoteBombModel1 );
 		}
 		else
 		{
@@ -107,11 +130,13 @@ class CFuncBomb : ScriptBaseEntity
 		}
 
 		if( m_blIsMoving && self.pev.velocity == Vector( 0, 0, 0 ) )
+		{
 			m_blIsMoving = false;
-
+		}
+		//Try to detect if next tile is blocked
 		if( m_blIsMoving )
 		{
-			@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin, 1 , "info_tile" );
+			@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin, 4 , "info_tile" );
 			if( pTile !is null )
 			{
 				TraceResult trTileClear;
@@ -127,14 +152,22 @@ class CFuncBomb : ScriptBaseEntity
 					vecEnd = self.pev.origin + Vector( 0, -64, 0 );
 
 				g_Utility.TraceLine( vecStart, vecEnd, dont_ignore_monsters, self.edict(), trTileClear );
+				CBaseEntity@ pHit = g_EntityFuncs.Instance( trTileClear.pHit );
 
 				if( trTileClear.flFraction < 1 )
 				{
-					self.pev.velocity = Vector( 0, 0, 0 );
-					m_blIsMoving = false;
+					if( m_blCanBounce )
+					{
+						self.pev.velocity = -self.pev.velocity;
+						g_SoundSystem.EmitSoundDyn( self.edict(), CHAN_AUTO, "bman/bounce.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
+					}
+					else
+					{
+						self.pev.velocity = Vector( 0, 0, 0 );
+						m_blIsMoving = false;
+					}
 					return;
 				}
-
 			}
 		}
 
@@ -149,11 +182,11 @@ class CFuncBomb : ScriptBaseEntity
 			int iX1Block, iX2Block, iY1Block, iY2Block;
 			iX1Block = iX2Block = iY1Block = iY2Block = 0;
 
-			@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin, 28 , "info_tile" );
+			@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin, 32 , "info_tile" );
 			if( pTile !is null )
 			{
 				te_explosion( pTile.pev.origin );
-				while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, self.pev.origin + Vector( 0, 0, 36 ), 38 , "*", "classname" ) ) !is null )
+				while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
 				{
 					if( pEntity is null )
 						continue;
@@ -172,16 +205,15 @@ class CFuncBomb : ScriptBaseEntity
 					}
 				}
 			}
-
 			for( int i = 1; i < iBombStrength + 1; i++ )
 			{
-				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( i * 64, 0, 0 ), 28 , "info_tile" );
+				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( i * 64, 0, 0 ), 32 , "info_tile" );
 				if( pTile !is null )
 				{
 					if( iX1Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 36 ), 38 , "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
@@ -208,13 +240,13 @@ class CFuncBomb : ScriptBaseEntity
 
 			for( int i = 1; i < iBombStrength + 1; i++ )
 			{
-				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( i * -64, 0, 0 ), 28 , "info_tile" );
+				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( i * -64, 0, 0 ), 32 , "info_tile" );
 				if( pTile !is null )
 				{
 					if( iX2Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 36 ), 38 , "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
@@ -241,13 +273,13 @@ class CFuncBomb : ScriptBaseEntity
 
 			for( int i = 1; i < iBombStrength + 1; i++ )
 			{
-				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( 0, i * 64, 0 ), 28 , "info_tile" );
+				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( 0, i * 64, 0 ), 32 , "info_tile" );
 				if( pTile !is null )
 				{
 					if( iY1Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 36 ), 38 , "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
@@ -274,13 +306,13 @@ class CFuncBomb : ScriptBaseEntity
 
 			for( int i = 1; i < iBombStrength + 1; i++ )
 			{
-				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( 0, i * -64, 0 ), 28 , "info_tile" );
+				@pTile = g_EntityFuncs.FindEntityInSphere( null, self.pev.origin + Vector( 0, i * -64, 0 ), 32, "info_tile" );
 				if( pTile !is null )
 				{
 					if( iY2Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 36 ), 38 , "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
@@ -317,7 +349,7 @@ class CFuncBomb : ScriptBaseEntity
 
 	void Touch( CBaseEntity@ pOther )
 	{
-		if( self.pev.solid == SOLID_BBOX && !m_blIsMoving && m_fLastKickTime < g_Engine.time )
+		if( self.pev.solid == SOLID_BBOX )
 		{
 			if( pOther is null || !pOther.IsPlayer() )
 				return;
@@ -325,13 +357,22 @@ class CFuncBomb : ScriptBaseEntity
 			CBasePlayer@ pPlayer = cast<CBasePlayer@>( pOther );
 			if( pPlayer.IsAlive() && !pPlayer.GetObserver().IsObserver() )
 			{
-				CustomKeyvalues@ kvEntityContact = pPlayer.GetCustomKeyvalues();
-
-				if( kvEntityContact.GetKeyvalue( "$i_canKick" ).GetInteger() == 1  )
+				float flXDiff = abs( self.pev.origin.x - pPlayer.pev.origin.x );
+				float flYDiff = abs( self.pev.origin.y - pPlayer.pev.origin.y );
+				if( m_blCanBounce && m_blIsMoving )
 				{
-					float flXDiff = abs( self.pev.origin.x - pPlayer.pev.origin.x );
-					float flYDiff = abs( self.pev.origin.y - pPlayer.pev.origin.y );
-
+					//Check if next tile is available before bouncing into it. This currently does not work very well.
+					if( abs( self.pev.velocity.x ) > 0 && !IsNextTileClear( self.pev.origin + Vector( ( self.pev.velocity.x/400 ) * 32, 0, 0  )  ) )
+						self.pev.velocity = g_vecZero;
+					else if( abs(self.pev.velocity.y ) > 0 && !IsNextTileClear( self.pev.origin + Vector( 0, ( self.pev.velocity.y/400 ) * 32, 0  )  ) )
+						self.pev.velocity = g_vecZero;
+					else
+						g_SoundSystem.EmitSoundDyn( self.edict(), CHAN_AUTO, "bman/bounce.mp3", VOL_NORM, ATTN_NORM, 0, PITCH_NORM );
+					return;
+				}
+				CustomKeyvalues@ kvEntityContact = pPlayer.GetCustomKeyvalues();
+				if( kvEntityContact.GetKeyvalue( "$i_canKick" ).GetInteger() == 1 && !m_blIsMoving && m_fLastKickTime < g_Engine.time )
+				{
 					if( self.pev.origin.x > pPlayer.pev.origin.x && flXDiff >= 32 && IsNextTileClear( self.pev.origin + Vector( 64, 0, 0 ) ) )
 					{
 						self.pev.velocity.x = 400;
@@ -418,5 +459,10 @@ class CFuncBomb : ScriptBaseEntity
 		m.WriteByte(frameRate);
 		m.WriteByte(flags);
 		m.End();
+	}
+
+	bool IsRemote()
+	{
+		return m_blIsRemote;
 	}
 }

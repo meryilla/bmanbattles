@@ -21,6 +21,9 @@ const string g_szNukeBombModel = "models/bman/bomb_golem_a.mdl";
 const string g_szPenBombModel1 = "models/bman/bomb_pen_small_a.mdl";
 const string g_szPenBombModel2 = "models/bman/bomb_pen_med_a.mdl";
 const string g_szPenBombModel3 = "models/bman/bomb_pen_large_a.mdl";
+const string g_szRemoteBombModel1 = "models/bman/bomb_remote_small_a.mdl";
+const string g_szRemoteBombModel2 = "models/bman/bomb_remote_med_a.mdl";
+const string g_szRemoteBombModel3 = "models/bman/bomb_remote_large_a.mdl";
 //Player Models
 const string g_szWhitePlayerModel = "models/player/bman_white/bman_white.mdl";
 const string g_szPinkPlayerModel = "models/player/bman_pink/bman_pink.mdl";
@@ -62,7 +65,8 @@ array<string> AllSounds = {
 	"debris/bustcrate1.wav",
 	"debris/bustcrate2.wav",
 	"debris/bustcrate3.wav",
-	"bman/timer.ogg"
+	"bman/timer.ogg",
+	"bman/bounce.mp3"
 };
 
 //Add substrings to the array below for the anti-cancer system to prevent players using models containing said substring
@@ -96,6 +100,8 @@ void MapInit()
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupKick", "func_powerup_kick" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupFullFire", "func_powerup_fullfire" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupPierce", "func_powerup_pierce" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupBounce", "func_powerup_bounce" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "CPowerupRemote", "func_powerup_remote" );
 
 	g_flPlayerScores.resize( 0 );
 	g_flPlayerScores.resize( 33 );
@@ -122,6 +128,8 @@ HookReturnCode ChatCheck( SayParameters@ pParams )
 	//{
 	//	pParams.ShouldHide = true;
 	//	//debug code here
+	//	CBaseEntity@ pMM = g_EntityFuncs.FindEntityByTargetname( null, "round_setup_mm" );
+	//	pMM.KeyValue( "condition_active_players", "10#0" );
 	//}
 	return HOOK_CONTINUE;
 }
@@ -170,6 +178,9 @@ void Precache()
 	g_Game.PrecacheModel( g_szPenBombModel1 );
 	g_Game.PrecacheModel( g_szPenBombModel2 );
 	g_Game.PrecacheModel( g_szPenBombModel3 );
+	g_Game.PrecacheModel( g_szRemoteBombModel1 );
+	g_Game.PrecacheModel( g_szRemoteBombModel2 );
+	g_Game.PrecacheModel( g_szRemoteBombModel3 );
 	g_Game.PrecacheModel( "models/woodgibs.mdl" );
 	//Player models
 	g_Game.PrecacheModel( g_szWhitePlayerModel );
@@ -181,6 +192,9 @@ void Precache()
 	g_Game.PrecacheModel( "sprites/bman/bonus_life.spr" );
 	g_Game.PrecacheModel( "sprites/bman/bonus_bomb2.spr" );
 	g_Game.PrecacheModel( "sprites/bman/bonus_bomb3.spr" );
+	g_Game.PrecacheModel( "sprites/bman/bonus_bomb4.spr" );
+	g_Game.PrecacheModel( "sprites/bman/bonus_bomb5.spr" );
+	g_Game.PrecacheModel( "sprites/bman/bonus_bomb6.spr" );
 	g_Game.PrecacheModel( "sprites/bman/timer.spr" );
 	//Sounds
 	for( uint i = 0; i < AllSounds.length(); i++ )
@@ -332,6 +346,27 @@ HookReturnCode PlayerThink( CBasePlayer@ pPlayer )
 		g_EngineFuncs.ClientPrintf( pPlayer, print_center, "You have no special bombs to plant\n" );
 	}
 
+	//Detonate remote bombs
+	if( ( pPlayer.m_afButtonPressed & IN_ATTACK ) > 0 && atobool( kvPlayer.GetKeyvalue( "$s_remote" ).GetString() ) )
+	{
+		CBaseEntity@ pBombEntity;
+		array<EHandle> hOwnedBombs;
+		while( ( @pBombEntity = g_EntityFuncs.FindEntityByClassname( pBombEntity, "func_bomb" ) ) !is null )
+		{
+			if( pBombEntity is null )
+				continue;
+
+			CFuncBomb@ pBomb = cast<CFuncBomb@>( g_EntityFuncs.CastToScriptClass( pBombEntity ) );
+			CustomKeyvalues@ kvBomb = pBombEntity.GetCustomKeyvalues();
+			if( IsOwner( pBombEntity, pPlayer ) && pBomb.IsRemote() )
+				hOwnedBombs.insertLast( pBombEntity );
+		}
+		for( uint i = 0; i < hOwnedBombs.length(); i++ )
+		{
+			g_EntityFuncs.DispatchKeyValue( hOwnedBombs[i].GetEntity().edict(), "$i_exploding", "1" );
+		}
+	}
+
 	return HOOK_CONTINUE;
 }
 
@@ -341,6 +376,7 @@ HookReturnCode PlayerSpawn( CBasePlayer@ pPlayer )
 		return HOOK_CONTINUE;
 
 	pPlayer.SetMaxSpeed( 200 );
+	pPlayer.pev.fuser4 = 1;
 
 	CBaseEntity@ pEntity = g_EntityFuncs.FindEntityByTargetname( pEntity, "camera_PID_" + pPlayer.entindex() );
 	if( pEntity !is null )
@@ -410,6 +446,8 @@ HookReturnCode SetPlayerValues( CBasePlayer@ pPlayer )
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_canKick", "0" );
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "1" );
 	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_pierce", "false" );
+	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_bounce", "false" );
+	g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_remote", "false" );
 
 	pPlayer.pev.frags = 0;
 	int iPlayerIndex = pPlayer.entindex();
@@ -452,6 +490,8 @@ void ClearPlayerKeyValues( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TY
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_canKick", "0" );
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "0" );
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_pierce", "false" );
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_bounce", "false" );
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_remote", "false" );
 			pPlayer.pev.targetname = "";
 			pPlayer.pev.health = 50;
 			pPlayer.SetMaxSpeed( 200 );
@@ -694,6 +734,7 @@ void AntiCancerDetection()
 		if( pPlayer is null || !pPlayer.IsConnected() )
 			continue;
 
+		pPlayer.RemoveAllItems( false );
 		KeyValueBuffer@ pInfo = g_EngineFuncs.GetInfoKeyBuffer( pPlayer.edict() );
 		for( uint j = 0; j < CancerModels.length(); j++ )
 		{
@@ -738,40 +779,22 @@ void CreateBomb( EHandle hPlayer, bool blIsNuke )
 	@pTile = g_EntityFuncs.FindEntityInSphere( null, pPlayer.pev.origin - Vector( 0, 0, 32 ), 28 , "info_tile" );
 	if( pTile !is null )
 	{
-		dictionary bombValues;
+		dictionary bombValues =
+		{
+			{ "origin", "" + ( pTile.pev.origin ).ToString() },
+			{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
+			{ "$i_ownerIndex", "" + pPlayer.entindex() },
+			{ "canPierce", "" + kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() },
+			{ "canBounce", "" + kvPlayer.GetKeyvalue( "$s_bounce" ).GetString() },
+			{ "$s_isRemote", "" + kvPlayer.GetKeyvalue( "$s_remote" ).GetString() }
+		};
+
 		if( kvPlayer.GetKeyvalue( "$i_poisonType" ).GetInteger() == 3 && !blIsNuke )
-		{
-			bombValues =
-			{
-				{ "origin", "" + ( pTile.pev.origin ).ToString() },
-				{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
-				{ "$i_ownerIndex", "" + pPlayer.entindex() },
-				{ "$i_bombStrength", "1" },
-				{ "canPierce", "" + kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() }
-			};
-		}
+			bombValues.set( "$i_bombStrength", "1" );
 		else if( blIsNuke )
-		{
-			bombValues =
-			{
-				{ "origin", "" + ( pTile.pev.origin ).ToString() },
-				{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
-				{ "$i_ownerIndex", "" + pPlayer.entindex() },
-				{ "$i_bombStrength", "999" },
-				{ "canPierce", "" + kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() }
-			};
-		}
+			bombValues.set( "$i_bombStrength", "999" );
 		else
-		{
-			bombValues =
-			{
-				{ "origin", "" + ( pTile.pev.origin ).ToString() },
-				{ "angles", "" + ( Vector( 0, pPlayer.pev.angles.y, 0 ) ).ToString() },
-				{ "$i_ownerIndex", "" + pPlayer.entindex() },
-				{ "$i_bombStrength", "" + kvPlayer.GetKeyvalue( "$i_ownBombStrength" ).GetString() },
-				{ "canPierce", "" + kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() }
-			};
-		}
+			bombValues.set( "$i_bombStrength", "" + kvPlayer.GetKeyvalue( "$i_ownBombStrength" ).GetString() );
 
 		@pBomb = g_EntityFuncs.CreateEntity( "func_bomb", bombValues, true);
 		if( blIsNuke )
@@ -871,20 +894,16 @@ void AttachBombSprite( EHandle hEntity )
 	{
 		if( kvPlayer.HasKeyvalue( "$s_hasBombSprite" ) and kvPlayer.GetKeyvalue( "$s_hasBombSprite" ).GetString() == "1" )
 		{
-			g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "_bonusBombSprite", null, null, USE_KILL, 0, 0 );
-			g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "bonusBomb_attachSprite", null, null, USE_OFF, 0, 0 );
-			dictionary sprValues =
+			@pSprite = g_EntityFuncs.FindEntityByTargetname( pSprite, "" + pPlayer.pev.targetname + "_bonusBombSprite" );
+			if( pSprite !is null )
 			{
-				{ "origin", "" + pPlayer.pev.origin.ToString() },
-				{ "targetname", "" + pPlayer.pev.targetname + "_bonusBombSprite" },
-				{ "model", "sprites/bman/bonus_bomb3.spr" },
-				{ "scale", "0.05" },
-				{ "spawnflags", "1" }
-			};
+				g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "bonusBomb_attachSprite", null, null, USE_OFF, 0, 0 );
+				g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "_bonusBombSprite", null, null, USE_OFF, 0, 0 );
 
-			@pSprite = g_EntityFuncs.CreateEntity( "env_sprite", sprValues, true );
-			g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "bonusBomb_attachSprite", null, null, USE_ON, 0, 0 );
-			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_hasBombSprite", "2" );
+				g_EntityFuncs.SetModel( pSprite, "sprites/bman/bonus_bomb" + kvPlayer.GetKeyvalue( "$i_maxBombCount" ).GetString()  + ".spr" );
+				g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "_bonusBombSprite", null, null, USE_ON, 0, 0 );
+				g_EntityFuncs.FireTargets( "" + pPlayer.pev.targetname + "bonusBomb_attachSprite", null, null, USE_ON, 0, 0 );
+			}
 
 			if( blClassicCamEnabled )
 			{
@@ -926,8 +945,7 @@ void AttachBombSprite( EHandle hEntity )
 			g_EntityFuncs.DispatchKeyValue( pAttach.edict(), "offset", Vector( 20, 0, 64 ).ToString() );
 		}
 
-		if( kvPlayer !is null )
-			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_hasBombSprite", "1" );
+		g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_hasBombSprite", "1" );
 	}
 }
 
@@ -1162,7 +1180,7 @@ void ChoosePowerup( EHandle hCrate )
 	CBaseEntity@ pCrate = cast<CBaseEntity@>( hCrate.GetEntity() );
 	string szPowerup;
 
-	if( Math.RandomLong( 1, 6 ) != 6 )
+	if( Math.RandomLong( 1, 4 ) != 4 )
 		return;
 
 	dictionary powerupValues =
@@ -1170,29 +1188,32 @@ void ChoosePowerup( EHandle hCrate )
 		{ "origin", "" + ( pCrate.pev.origin ).ToString() }
 	};
 
-	int iPowerupChance = Math.RandomLong( 1, 18 );
+	int iPowerupChance = Math.RandomLong( 1, 100 );
 
 	//There's got to be a better way than this...
-	if( iPowerupChance <= 5 )
+	if( iPowerupChance <= 30 )
 		szPowerup = "func_powerup_bomb";
-	else if( iPowerupChance <= 10 )
+	else if( iPowerupChance <= 50 )
 		szPowerup = "func_powerup_fire";
-	else if( iPowerupChance <= 13 )
+	else if( iPowerupChance <= 60 )
 		szPowerup = "func_powerup_skate";
-	else if( iPowerupChance == 14 )
+	else if( iPowerupChance <= 67 )
 		szPowerup = "func_powerup_life";
-	else if( iPowerupChance == 15 )
+	else if( iPowerupChance <= 75 )
 		szPowerup = "func_powerup_kick";
-	else if( iPowerupChance == 16 )
+	else if( iPowerupChance <= 79 )
 		szPowerup = "func_powerup_fullfire";
-	else if( iPowerupChance == 17 )
+	else if( iPowerupChance <= 84 )
 		szPowerup = "func_powerup_pierce";
+	else if( iPowerupChance <= 88 )
+		szPowerup = "func_powerup_bounce";
+	else if( iPowerupChance <= 92 )
+		szPowerup = "func_powerup_remote";
 	else
 		szPowerup = "func_powerup_skull";
 
 	CBaseEntity@ pPowerup = g_EntityFuncs.CreateEntity( szPowerup, powerupValues, true );
 	g_EntityFuncs.SetSize( pPowerup.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
-
 }
 
 //Very important function saar, do not remove

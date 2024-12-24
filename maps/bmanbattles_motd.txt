@@ -18,8 +18,10 @@ Powerups:
 - Heart: Increases your health, allowing you to survive 1 bomb blast.
 - Roller Skate: Increase speed.
 - Kick: Shoves bombs you touch in the direction you are moving in.
-- Pierce: Bombs can pierce through crates.
+- Pierce: Bombs can pierce through crates. Incompatible with remote.
 - FullFire: Players can place a one-time use bomb using the RELOAD key, which has max range.
+- Bounce: Bombs now bounce against other objects after being kicked.
+- Remote: Bombs can be set off remotely using the ATTACK1 key. Incompatible with pierce.
 - Skull: Recieve a random disease.
 
 Diseases last until you either die, pick up another powerup, or touch another player (which transfers the disease to them).
@@ -46,5 +48,5 @@ Explosion Sprites by R.C.
 
 Music from Super Bomberman 2
 
-Thanks to the Chan Co-op community for help with testing (too many names to remember and write here, sorry!)
+Thanks to the Chan Co-op (RIP) and S/v/en Co-op community for help with testing (too many names to remember and write here, sorry!)
 

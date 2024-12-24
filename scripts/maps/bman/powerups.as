@@ -1,3 +1,14 @@
+array<string> g_szHelpMsgs = {
+	"PRESS RELOAD KEY TO PLACE NUKE",
+	"PRESS ATTACK1 KEY TO DETONATE BOMBS",
+};
+
+enum e_bombs
+{
+	NUKE = 0,
+	REMOTE
+}
+
 class CPowerupBomb : ScriptBaseAnimating
 {
 	private float m_flNextTouchTime;
@@ -47,7 +58,7 @@ class CPowerupBomb : ScriptBaseAnimating
 			if( kvEntity is null || !kvEntity.HasKeyvalue( "$i_maxBombCount" ) )
 				return;
 
-			if ( kvEntity.GetKeyvalue( "$i_maxBombCount" ).GetInteger() < 3 )
+			if ( kvEntity.GetKeyvalue( "$i_maxBombCount" ).GetInteger() < 6 )
 			{
 				string szMaxBombCount;
 				szMaxBombCount = string( kvEntity.GetKeyvalue( "$i_maxBombCount" ).GetInteger() + 1 );
@@ -420,39 +431,10 @@ class CPowerupFullFire : ScriptBaseAnimating
 		{
 			ClearPoison( pPlayer );
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$i_fullfire", "1" );
-			HudHelp( pPlayer );
+			HudHelp( pPlayer, g_szHelpMsgs[NUKE] );
 			self.Killed( null, 0 );
 			g_SoundSystem.PlaySound( pPlayer.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pPlayer.entindex(), true, pPlayer.GetOrigin() );
 		}
-	}
-
-	void HudHelp( EHandle hPlayer )
-	{
-		if( !hPlayer )
-			return;
-
-		CBasePlayer@ pPlayer = cast<CBasePlayer@>( hPlayer.GetEntity() );
-
-		HUDTextParams PowerupHudText;
-		PowerupHudText.x = -1;
-		PowerupHudText.y = 0.7;
-		PowerupHudText.effect = 0;
-		PowerupHudText.r1 = 255;
-		PowerupHudText.g1 = 100;
-		PowerupHudText.b1 = 100;
-		PowerupHudText.a1 = 0;
-		PowerupHudText.r2 = 255;
-		PowerupHudText.g2 = 100;
-		PowerupHudText.b2 = 100;
-		PowerupHudText.a2 = 0;
-		PowerupHudText.fadeinTime = 0;
-		PowerupHudText.fadeoutTime = 1;
-		PowerupHudText.holdTime = 10;
-		PowerupHudText.fxTime = 0;
-		PowerupHudText.channel = 2;
-
-		g_PlayerFuncs.HudMessage( pPlayer, PowerupHudText, "PRESS RELOAD KEY TO PLACE NUKE" );
-
 	}
 }
 
@@ -499,10 +481,150 @@ class CPowerupPierce : ScriptBaseAnimating
 		if( pPlayer.IsAlive() && !pPlayer.GetObserver().IsObserver() )
 		{
 			ClearPoison( pPlayer );
+			CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
+			if( atobool( kvPlayer.GetKeyvalue( "$s_remote" ).GetString() ) )
+				g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_remote", "false" );
+
 			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_pierce", "true" );
 			self.Killed( null, 0 );
 		}
-			g_SoundSystem.PlaySound( pPlayer.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pPlayer.entindex(), true, pPlayer.GetOrigin() );
+		g_SoundSystem.PlaySound( pPlayer.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pPlayer.entindex(), true, pPlayer.GetOrigin() );
 		self.pev.nextthink = g_Engine.time + 0.1f;
 	}
+}
+
+class CPowerupBounce : ScriptBaseAnimating
+{
+	private float m_flNextTouchTime;
+
+	void Spawn()
+	{
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 3 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
+
+		self.pev.solid = SOLID_BBOX;
+		self.pev.movetype = MOVETYPE_PUSHSTEP;
+		self.pev.takedamage = DAMAGE_YES;
+
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();
+
+		self.pev.targetname = "powerup_bounce_powerup";
+
+		if( self.pev.health == 0.0f )
+			self.pev.health = g_iExplodeDamage;
+
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+
+	void Touch( CBaseEntity@ pOther )
+	{
+		if( pOther is null || !pOther.IsPlayer() )
+			return;
+
+		CBasePlayer@ pPlayer = cast<CBasePlayer@>( pOther );
+		if( pPlayer.IsAlive() && !pPlayer.GetObserver().IsObserver() )
+		{
+			ClearPoison( pPlayer );
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_bounce", "true" );
+			self.Killed( null, 0 );
+		}
+		g_SoundSystem.PlaySound( pPlayer.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pPlayer.entindex(), true, pPlayer.GetOrigin() );
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+}
+
+class CPowerupRemote : ScriptBaseAnimating
+{
+	private float m_flNextTouchTime;
+
+	void Spawn()
+	{
+		g_EntityFuncs.SetModel( self, g_szPowerupModel );
+		self.SetBodygroup( 0, 12 );
+		g_EntityFuncs.SetOrigin( self, self.pev.origin );
+		g_EntityFuncs.SetSize( self.pev, Vector( -18, -18, 0 ), Vector( 18, 18, 50 ) );
+
+		self.pev.solid = SOLID_BBOX;
+		self.pev.movetype = MOVETYPE_PUSHSTEP;
+		self.pev.takedamage = DAMAGE_YES;
+
+		//when classic cam is enabled set the animation so that the powerup is visible from above
+		if( blClassicCamEnabled )
+		{
+			self.pev.angles = Vector( 0, 90, 0 );
+			self.pev.sequence = 1;
+		}
+		else
+			self.pev.sequence = 0;
+		self.pev.frame = 0;
+		self.ResetSequenceInfo();
+
+		self.pev.targetname = "powerup_remote_powerup";
+
+		if( self.pev.health == 0.0f )
+			self.pev.health = g_iExplodeDamage;
+
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+
+	void Touch( CBaseEntity@ pOther )
+	{
+		if( pOther is null || !pOther.IsPlayer() )
+			return;
+
+		CBasePlayer@ pPlayer = cast<CBasePlayer@>( pOther );
+		if( pPlayer.IsAlive() && !pPlayer.GetObserver().IsObserver() )
+		{
+			ClearPoison( pPlayer );
+			HudHelp( pPlayer, g_szHelpMsgs[REMOTE] );
+			CustomKeyvalues@ kvPlayer = pPlayer.GetCustomKeyvalues();
+			if( atobool( kvPlayer.GetKeyvalue( "$s_pierce" ).GetString() ) )
+				g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_pierce", "false" );
+
+			g_EntityFuncs.DispatchKeyValue( pPlayer.edict(), "$s_remote", "true" );
+			self.Killed( null, 0 );
+		}
+		g_SoundSystem.PlaySound( pPlayer.edict(), CHAN_VOICE, "bman/item_get.mp3", 10.0f, 10.0f, 0, PITCH_NORM, pPlayer.entindex(), true, pPlayer.GetOrigin() );
+		self.pev.nextthink = g_Engine.time + 0.1f;
+	}
+}
+
+void HudHelp( EHandle hPlayer, string szMessage )
+{
+	if( !hPlayer )
+		return;
+
+	CBasePlayer@ pPlayer = cast<CBasePlayer@>( hPlayer.GetEntity() );
+
+	HUDTextParams PowerupHudText;
+	PowerupHudText.x = -1;
+	PowerupHudText.y = 0.7;
+	PowerupHudText.effect = 0;
+	PowerupHudText.r1 = 255;
+	PowerupHudText.g1 = 100;
+	PowerupHudText.b1 = 100;
+	PowerupHudText.a1 = 0;
+	PowerupHudText.r2 = 255;
+	PowerupHudText.g2 = 100;
+	PowerupHudText.b2 = 100;
+	PowerupHudText.a2 = 0;
+	PowerupHudText.fadeinTime = 0;
+	PowerupHudText.fadeoutTime = 1;
+	PowerupHudText.holdTime = 10;
+	PowerupHudText.fxTime = 0;
+	PowerupHudText.channel = 2;
+
+	g_PlayerFuncs.HudMessage( pPlayer, PowerupHudText, szMessage );
+
 }
