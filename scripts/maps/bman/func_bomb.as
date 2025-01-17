@@ -186,7 +186,7 @@ class CFuncBomb : ScriptBaseEntity
 			if( pTile !is null )
 			{
 				te_explosion( pTile.pev.origin );
-				while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
+				while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 27 ), 36, "*", "classname" ) ) !is null )
 				{
 					if( pEntity is null )
 						continue;
@@ -213,7 +213,7 @@ class CFuncBomb : ScriptBaseEntity
 					if( iX1Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 27 ), 36, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
@@ -246,7 +246,7 @@ class CFuncBomb : ScriptBaseEntity
 					if( iX2Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 27 ), 36, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
@@ -279,7 +279,7 @@ class CFuncBomb : ScriptBaseEntity
 					if( iY1Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 27 ), 36, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
@@ -312,7 +312,7 @@ class CFuncBomb : ScriptBaseEntity
 					if( iY2Block > 0 )
 						break;
 					te_explosion( pTile.pev.origin );
-					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 18 ), 34, "*", "classname" ) ) !is null )
+					while( ( @pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, pTile.pev.origin + Vector( 0, 0, 27 ), 36, "*", "classname" ) ) !is null )
 					{
 						if( pEntity is null )
 							continue;
