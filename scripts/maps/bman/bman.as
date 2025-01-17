@@ -1247,7 +1247,7 @@ void Timer( CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, flo
 	}
 
 	CBaseEntity@ pWorld = g_EntityFuncs.Instance(0);
-	g_SoundSystem.PlaySound( pWorld.edict(), CHAN_AUTO, "bman/timer.ogg", 1.0f, ATTN_NONE, 0, 100 );
+	g_SoundSystem.PlaySound( pWorld.edict(), CHAN_MUSIC, "bman/timer.ogg", 1.0f, ATTN_NONE, 0, 100 );
 
 	RGBA RGBA_STICKER = RGBA( 255, 255, 255, 255 );
 
